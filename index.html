@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AlbumCraft – Interactive Photo Album Templates</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #141414;
+      --bg2: #1a1a1a;
+      --bg3: #222;
+      --accent: #e50914;
+      --accent2: #f40612;
+      --text: #fff;
+      --text2: #b3b3b3;
+      --text3: #666;
+      --heading: 'Bebas Neue', Impact, sans-serif;
+      --body: 'Roboto', system-ui, sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--body);
+      scroll-behavior: smooth;
+    }
+
+    a { text-decoration: none; color: inherit; }
+
+    /* ======== NAVBAR ======== */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 5%;
+      height: 64px;
+      background: rgba(20,20,20,0.97);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-icon { font-size: 22px; }
+
+    .brand-name {
+      font-family: var(--heading);
+      font-size: 26px;
+      letter-spacing: 2px;
+      color: var(--accent);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+
+    .nav-links a {
+      font-size: 14px;
+      color: var(--text2);
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    .btn-sign-in {
+      padding: 7px 18px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 3px;
+      font-size: 14px;
+      color: var(--text) !important;
+      transition: background 0.2s !important;
+    }
+
+    .btn-sign-in:hover { background: rgba(255,255,255,0.2) !important; }
+
+    /* ======== HERO ======== */
+    .page-hero {
+      position: relative;
+      padding: 100px 5% 90px;
+      text-align: center;
+      overflow: hidden;
+      background: linear-gradient(180deg, #1a0008 0%, #141414 100%);
+    }
+
+    .page-hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 0%, rgba(229,9,20,0.12) 0%, transparent 70%);
+    }
+
+    .page-hero h1 {
+      position: relative;
+      font-family: var(--heading);
+      font-size: clamp(2.8rem, 7vw, 5.5rem);
+      line-height: 1;
+      letter-spacing: 2px;
+      margin-bottom: 20px;
+    }
+
+    .page-hero h1 span { color: var(--accent); }
+
+    .page-hero p {
+      position: relative;
+      font-size: clamp(1rem, 2vw, 1.2rem);
+      color: var(--text2);
+      margin-bottom: 36px;
+    }
+
+    .btn-start {
+      position: relative;
+      display: inline-block;
+      padding: 14px 36px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      border-radius: 3px;
+      transition: background 0.2s, transform 0.2s;
+    }
+
+    .btn-start:hover {
+      background: var(--accent2);
+      transform: translateY(-2px);
+    }
+
+    /* ======== TEMPLATES SECTION ======== */
+    .templates-section {
+      padding: 70px 5%;
+    }
+
+    .section-intro {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .section-intro h2 {
+      font-family: var(--heading);
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+    }
+
+    .section-intro p {
+      color: var(--text2);
+      font-size: 15px;
+    }
+
+    .templates-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* ======== TEMPLATE CARD ======== */
+    .template-card {
+      background: var(--bg2);
+      border-radius: 6px;
+      overflow: hidden;
+      transition: transform 0.3s, box-shadow 0.3s;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .template-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+
+    .template-card.featured {
+      border-color: rgba(229,9,20,0.3);
+    }
+
+    .card-thumbnail {
+      position: relative;
+      height: 180px;
+      overflow: hidden;
+    }
+
+    .thumbnail-content {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transition: transform 0.4s;
+    }
+
+    .template-card:hover .thumbnail-content {
+      transform: scale(1.04);
+    }
+
+    /* Thumbnail backgrounds */
+    .loveflix-thumb {
+      background: linear-gradient(135deg, #1a0010 0%, #4a001a 40%, #8b0030 80%, #1a0008 100%);
+    }
+
+    .wedding-thumb {
+      background: linear-gradient(135deg, #1a1200 0%, #3d2d00 40%, #6b5000 80%, #1a1200 100%);
+    }
+
+    .birthday-thumb {
+      background: linear-gradient(135deg, #001a3d 0%, #002d6b 40%, #004db0 80%, #001520 100%);
+    }
+
+    .travel-thumb {
+      background: linear-gradient(135deg, #001a10 0%, #003a22 40%, #006040 80%, #001210 100%);
+    }
+
+    .thumb-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 60%);
+    }
+
+    .thumb-label {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .thumb-logo {
+      font-family: var(--heading);
+      font-size: 2rem;
+      letter-spacing: 4px;
+      color: var(--accent);
+      text-shadow: 0 2px 12px rgba(0,0,0,0.8);
+    }
+
+    .thumb-stars {
+      font-size: 14px;
+      color: #f5c518;
+      letter-spacing: 2px;
+    }
+
+    .thumb-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 3px 10px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 2px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .coming-soon-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 3px 10px;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: var(--text2);
+      font-size: 11px;
+      border-radius: 2px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .card-info {
+      padding: 20px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .card-header h3 {
+      font-family: var(--heading);
+      font-size: 1.4rem;
+      letter-spacing: 1px;
+    }
+
+    .card-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 20px;
+      color: var(--text2);
+    }
+
+    .card-info p {
+      font-size: 13px;
+      color: var(--text2);
+      line-height: 1.6;
+      margin-bottom: 18px;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-preview {
+      flex: 1;
+      padding: 9px 16px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 3px;
+      color: var(--text2);
+      font-size: 13px;
+      text-align: center;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .btn-preview:hover { background: rgba(255,255,255,0.15); color: var(--text); }
+
+    .btn-customize {
+      flex: 2;
+      padding: 9px 16px;
+      background: var(--accent);
+      border-radius: 3px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      transition: background 0.2s;
+    }
+
+    .btn-customize:hover { background: var(--accent2); }
+
+    .btn-notify {
+      flex: 1;
+      padding: 9px 16px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 3px;
+      color: var(--text3);
+      font-size: 13px;
+      cursor: not-allowed;
+      width: 100%;
+      font-family: var(--body);
+    }
+
+    .template-card.coming-soon { opacity: 0.7; }
+    .template-card.coming-soon:hover { opacity: 0.85; }
+
+    /* ======== HOW IT WORKS ======== */
+    .how-it-works {
+      padding: 80px 5%;
+      background: var(--bg2);
+    }
+
+    .how-it-works h2 {
+      font-family: var(--heading);
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      letter-spacing: 2px;
+      text-align: center;
+      margin-bottom: 50px;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 32px;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .step {
+      text-align: center;
+      padding: 24px;
+    }
+
+    .step-icon {
+      font-size: 2.5rem;
+      margin-bottom: 16px;
+    }
+
+    .step h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+
+    .step p {
+      font-size: 13px;
+      color: var(--text2);
+      line-height: 1.7;
+    }
+
+    /* ======== FOOTER ======== */
+    footer {
+      padding: 40px 5%;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .footer-content {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 32px;
+      flex-wrap: wrap;
+    }
+
+    .footer-brand .brand-name {
+      font-family: var(--heading);
+      font-size: 22px;
+      letter-spacing: 2px;
+      color: var(--accent);
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .footer-brand p {
+      font-size: 13px;
+      color: var(--text3);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .footer-links a {
+      font-size: 13px;
+      color: var(--text3);
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover { color: var(--text2); }
+
+    /* ======== RESPONSIVE ======== */
+    @media (max-width: 600px) {
+      .nav-links { gap: 16px; }
+      .nav-links a:not(.btn-sign-in) { display: none; }
+      .page-hero { padding: 60px 5% 60px; }
+      .card-actions { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav>
+    <div class="brand">
+      <span class="brand-icon">🎬</span>
+      <span class="brand-name">AlbumCraft</span>
+    </div>
+    <div class="nav-links">
+      <a href="#templates">Templates</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#" class="btn-sign-in">Sign In</a>
+    </div>
+  </nav>
+
+  <!-- Page Hero -->
+  <section class="page-hero">
+    <h1>Create Your Interactive<br><span>Photo Album</span></h1>
+    <p>Choose a template. Upload your photos. Preview for free. Publish when you're ready.</p>
+    <a href="#templates" class="btn-start">Explore Templates ↓</a>
+  </section>
+
+  <!-- Templates -->
+  <section id="templates" class="templates-section">
+    <div class="section-intro">
+      <h2>Choose Your Template</h2>
+      <p>Select a design and start customizing your album for free — no account needed</p>
+    </div>
+
+    <div class="templates-grid">
+
+      <!-- LoveFlix -->
+      <div class="template-card featured">
+        <div class="card-thumbnail">
+          <div class="thumbnail-content loveflix-thumb">
+            <div class="thumb-overlay"></div>
+            <div class="thumb-label">
+              <div class="thumb-logo">LOVEFLIX</div>
+              <div class="thumb-stars">★★★★★</div>
+            </div>
+            <div class="thumb-badge">Featured</div>
+          </div>
+        </div>
+        <div class="card-info">
+          <div class="card-header">
+            <h3>LoveFlix</h3>
+            <span class="card-tag">Couples</span>
+          </div>
+          <p>Cinematic Netflix-inspired couple photo album. Your love story, movie-style with hero carousel, photo galleries, and a stunning detail view.</p>
+          <div class="card-actions">
+            <a href="loveflix_template/preview.html" class="btn-preview">Preview</a>
+            <a href="loveflix_template/editor.html" class="btn-customize">Customize →</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- WeddingFlix -->
+      <div class="template-card coming-soon">
+        <div class="card-thumbnail">
+          <div class="thumbnail-content wedding-thumb">
+            <div class="thumb-overlay"></div>
+            <div class="thumb-label">
+              <div class="thumb-logo" style="color: #f0e0b0; font-size: 1.7rem;">WEDDINGFLIX</div>
+            </div>
+            <div class="coming-soon-badge">Coming Soon</div>
+          </div>
+        </div>
+        <div class="card-info">
+          <div class="card-header">
+            <h3>WeddingFlix</h3>
+            <span class="card-tag">Wedding</span>
+          </div>
+          <p>Elegant wedding album with ceremony gallery, highlight reel, and guest memory wall.</p>
+          <div class="card-actions">
+            <button class="btn-notify" disabled>Notify Me</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Birthday -->
+      <div class="template-card coming-soon">
+        <div class="card-thumbnail">
+          <div class="thumbnail-content birthday-thumb">
+            <div class="thumb-overlay"></div>
+            <div class="thumb-label">
+              <div class="thumb-logo" style="color: #ffd700; font-size: 1.5rem;">BIRTHDAYFLIX</div>
+            </div>
+            <div class="coming-soon-badge">Coming Soon</div>
+          </div>
+        </div>
+        <div class="card-info">
+          <div class="card-header">
+            <h3>Birthday Album</h3>
+            <span class="card-tag">Birthday</span>
+          </div>
+          <p>Vibrant birthday celebration album with party photos and heartfelt wishes from the people you love.</p>
+          <div class="card-actions">
+            <button class="btn-notify" disabled>Notify Me</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Travel -->
+      <div class="template-card coming-soon">
+        <div class="card-thumbnail">
+          <div class="thumbnail-content travel-thumb">
+            <div class="thumb-overlay"></div>
+            <div class="thumb-label">
+              <div class="thumb-logo" style="color: #90e0ef; font-size: 1.7rem;">TRAVELFLIX</div>
+            </div>
+            <div class="coming-soon-badge">Coming Soon</div>
+          </div>
+        </div>
+        <div class="card-info">
+          <div class="card-header">
+            <h3>Travel Memories</h3>
+            <span class="card-tag">Travel</span>
+          </div>
+          <p>Map-driven travel album with journey timelines, destination cards, and adventure stories.</p>
+          <div class="card-actions">
+            <button class="btn-notify" disabled>Notify Me</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section id="how-it-works" class="how-it-works">
+    <h2>How It Works</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-icon">🎨</div>
+        <h3>1. Choose a Template</h3>
+        <p>Pick from our collection of beautifully designed album templates, each with a unique visual style.</p>
+      </div>
+      <div class="step">
+        <div class="step-icon">📸</div>
+        <h3>2. Upload &amp; Customize</h3>
+        <p>Add your own photos, edit titles, descriptions, genres, and ratings — all inside the browser.</p>
+      </div>
+      <div class="step">
+        <div class="step-icon">👁️</div>
+        <h3>3. Preview Your Album</h3>
+        <p>Switch to preview mode to see exactly how your finished album will look to others.</p>
+      </div>
+      <div class="step">
+        <div class="step-icon">🚀</div>
+        <h3>4. Publish &amp; Share</h3>
+        <p>Pay once to publish with a shareable public link. No subscriptions, no watermarks.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-content">
+      <div class="footer-brand">
+        <span class="brand-name">AlbumCraft</span>
+        <p>Interactive photo albums, beautifully designed.</p>
+      </div>
+      <div class="footer-links">
+        <a href="#">About</a>
+        <a href="#">Pricing</a>
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Use</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

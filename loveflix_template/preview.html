@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LoveFlix – Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #141414;
+      --bg2: #1a1a1a;
+      --accent: #e50914;
+      --accent2: #f40612;
+      --text: #fff;
+      --text2: #b3b3b3;
+      --text3: #666;
+      --gold: #f5c518;
+      --nav-h: 60px;
+      --heading: 'Bebas Neue', Impact, sans-serif;
+      --body: 'Roboto', system-ui, sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--body);
+      overflow-x: hidden;
+    }
+
+    a { text-decoration: none; color: inherit; }
+
+    /* ============================================================
+       NAVBAR
+    ============================================================ */
+    #navbar {
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      height: var(--nav-h);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 4%;
+      background: rgba(20,20,20,0.97);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .nav-left { display: flex; align-items: center; gap: 20px; }
+
+    .nav-back {
+      font-size: 13px;
+      color: var(--text2);
+      transition: color 0.2s;
+    }
+
+    .nav-back:hover { color: var(--text); }
+
+    .nav-logo {
+      font-family: var(--heading);
+      font-size: 26px;
+      letter-spacing: 3px;
+      color: var(--accent);
+    }
+
+    .nav-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 2px;
+      color: var(--text2);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .nav-right { display: flex; align-items: center; gap: 10px; }
+
+    .btn-edit {
+      padding: 7px 18px;
+      background: rgba(255,255,255,0.1);
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 3px;
+      font-family: var(--body);
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.2s;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .btn-edit:hover { background: rgba(255,255,255,0.18); }
+
+    .btn-publish {
+      padding: 7px 20px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 3px;
+      font-family: var(--body);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-publish:hover { background: var(--accent2); }
+
+    /* ============================================================
+       HERO
+    ============================================================ */
+    #heroSection {
+      position: relative;
+      width: 100%;
+      height: 90vh;
+      overflow: hidden;
+      background: #000;
+      user-select: none;
+    }
+
+    #heroTrack {
+      display: flex;
+      height: 100%;
+      transition: transform 0.7s cubic-bezier(0.25,0.46,0.45,0.94);
+      will-change: transform;
+    }
+
+    .hero-slide {
+      min-width: 100%;
+      height: 100%;
+      position: relative;
+      background-size: cover;
+      background-position: center;
+      flex-shrink: 0;
+    }
+
+    .hero-overlay {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(to right, rgba(0,0,0,0.88) 30%, rgba(0,0,0,0.25) 70%, rgba(0,0,0,0.05) 100%),
+        linear-gradient(to top, rgba(0,0,0,0.75) 15%, rgba(0,0,0,0.1) 55%, transparent 100%);
+      pointer-events: none;
+    }
+
+    .hero-content {
+      position: absolute;
+      bottom: 22%;
+      left: 5%;
+      max-width: 44%;
+      z-index: 2;
+    }
+
+    .hero-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.45);
+      border-radius: 2px;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    .hero-title {
+      font-family: var(--heading);
+      font-size: clamp(2.6rem,5.5vw,4.8rem);
+      line-height: 0.95;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+      text-shadow: 2px 4px 12px rgba(0,0,0,0.4);
+    }
+
+    .hero-tagline {
+      font-size: clamp(0.85rem,1.4vw,1.05rem);
+      color: var(--accent);
+      font-style: italic;
+      font-weight: 500;
+      margin-bottom: 14px;
+    }
+
+    .hero-description {
+      font-size: clamp(0.78rem,1.1vw,0.92rem);
+      color: rgba(255,255,255,0.85);
+      line-height: 1.65;
+      margin-bottom: 16px;
+      max-width: 440px;
+    }
+
+    .hero-meta {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 22px;
+      font-size: 12px;
+      color: var(--text2);
+      flex-wrap: wrap;
+    }
+
+    .hero-rating { color: var(--gold); letter-spacing: 1px; }
+
+    .hero-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    .btn-play {
+      padding: 10px 26px;
+      background: #fff;
+      color: #000;
+      border: none;
+      border-radius: 3px;
+      font-family: var(--body);
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-play:hover { background: rgba(255,255,255,0.85); }
+
+    .btn-info {
+      padding: 10px 22px;
+      background: rgba(109,109,110,0.65);
+      color: #fff;
+      border: none;
+      border-radius: 3px;
+      font-family: var(--body);
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-info:hover { background: rgba(109,109,110,0.45); }
+
+    .hero-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 10;
+      width: 46px;
+      height: 90px;
+      background: rgba(0,0,0,0.35);
+      color: #fff;
+      border: none;
+      font-size: 30px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.55;
+      transition: opacity 0.25s, background 0.25s;
+    }
+
+    .hero-arrow:hover { opacity: 1; background: rgba(0,0,0,0.65); }
+    .hero-arrow-left  { left: 0;  border-radius: 0 4px 4px 0; }
+    .hero-arrow-right { right: 0; border-radius: 4px 0 0 4px; }
+
+    #heroDots {
+      position: absolute;
+      bottom: 10%;
+      right: 5%;
+      display: flex;
+      gap: 6px;
+      z-index: 10;
+    }
+
+    .hero-dot {
+      width: 14px;
+      height: 3px;
+      background: rgba(255,255,255,0.35);
+      border-radius: 2px;
+      cursor: pointer;
+      transition: width 0.3s, background 0.3s;
+    }
+
+    .hero-dot.active { width: 28px; background: var(--accent); }
+
+    /* ============================================================
+       SECTIONS
+    ============================================================ */
+    #sectionsContainer { padding: 28px 0 80px; background: var(--bg); }
+
+    .section-block { margin-bottom: 44px; overflow-x: clip; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      padding: 0 4%;
+      margin-bottom: 10px;
+    }
+
+    .section-title {
+      font-family: var(--heading);
+      font-size: clamp(1.15rem,2.2vw,1.55rem);
+      letter-spacing: 1.5px;
+    }
+
+    .carousel-wrapper { position: relative; padding: 52px 0; }
+
+    .photo-row {
+      display: flex;
+      gap: 6px;
+      padding: 0 4%;
+      transition: transform 0.4s ease;
+      will-change: transform;
+    }
+
+    .section-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 20;
+      width: 38px;
+      height: 80px;
+      background: rgba(20,20,20,0.82);
+      color: #fff;
+      border: none;
+      font-size: 22px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .carousel-wrapper:hover .section-arrow { opacity: 1; }
+    .section-arrow-left  { left: 0;  border-radius: 0 4px 4px 0; }
+    .section-arrow-right { right: 0; border-radius: 4px 0 0 4px; }
+
+    /* ============================================================
+       PHOTO CARDS
+    ============================================================ */
+    .photo-card {
+      flex-shrink: 0;
+      width: 200px;
+      height: 130px;
+      border-radius: 4px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.28s ease;
+      transform-origin: center center;
+    }
+
+    .photo-card-bg {
+      position: absolute;
+      inset: 0;
+      background-size: cover;
+      background-position: center;
+      transition: transform 0.4s ease;
+    }
+
+    .photo-card:hover .photo-card-bg { transform: scale(1.06); }
+
+    .photo-card-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 50%, transparent 100%);
+      opacity: 0;
+      transition: opacity 0.25s;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 8px 10px;
+    }
+
+    .photo-card:hover .photo-card-overlay { opacity: 1; }
+
+    .card-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-meta { font-size: 10px; color: var(--text2); }
+
+    /* ============================================================
+       DETAIL PANEL
+    ============================================================ */
+    #detailPanel {
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    #detailPanel.open { pointer-events: all; opacity: 1; }
+
+    #detailOverlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.88);
+      cursor: pointer;
+    }
+
+    #detailContent {
+      position: relative;
+      z-index: 1;
+      width: 90%;
+      max-width: 880px;
+      max-height: 88vh;
+      background: #181818;
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      transform: scale(0.87);
+      transition: transform 0.3s;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.75);
+    }
+
+    #detailPanel.open #detailContent { transform: scale(1); }
+
+    #closeDetail {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 10;
+      width: 32px;
+      height: 32px;
+      background: rgba(20,20,20,0.8);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 50%;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    #closeDetail:hover { background: rgba(255,255,255,0.2); }
+
+    #detailLeft {
+      flex: 1.3;
+      min-height: 400px;
+      position: relative;
+      overflow: hidden;
+      background: #111;
+    }
+
+    #detailImg {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    #detailPlaceholder {
+      position: absolute;
+      inset: 0;
+      display: none;
+    }
+
+    #detailRight {
+      flex: 1;
+      padding: 36px 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+    }
+
+    #detailBadge {
+      display: inline-block;
+      padding: 3px 9px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.35);
+      border-radius: 2px;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      width: fit-content;
+    }
+
+    #detailTitle {
+      font-family: var(--heading);
+      font-size: clamp(1.5rem,2.8vw,2.1rem);
+      line-height: 1.05;
+    }
+
+    #detailRating { color: var(--gold); font-size: 19px; letter-spacing: 2px; }
+
+    #detailCategory { font-size: 13px; color: var(--text2); }
+
+    #detailDesc {
+      font-size: 14px;
+      line-height: 1.75;
+      color: rgba(255,255,255,0.82);
+    }
+
+    /* ============================================================
+       PAYWALL
+    ============================================================ */
+    #paywallModal {
+      position: fixed;
+      inset: 0;
+      z-index: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    #paywallModal.open { pointer-events: all; opacity: 1; }
+
+    #paywallOverlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.92);
+    }
+
+    #paywallBox {
+      position: relative;
+      z-index: 1;
+      width: 90%;
+      max-width: 430px;
+      background: #1a1a1a;
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 8px;
+      padding: 42px 38px;
+      text-align: center;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.75);
+      transform: translateY(18px);
+      transition: transform 0.3s;
+    }
+
+    #paywallModal.open #paywallBox { transform: translateY(0); }
+
+    #closePaywall {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: none;
+      border: none;
+      color: var(--text2);
+      font-size: 20px;
+      cursor: pointer;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.2s;
+    }
+
+    #closePaywall:hover { color: var(--text); }
+
+    .paywall-icon { font-size: 38px; margin-bottom: 14px; }
+
+    #paywallBox h2 {
+      font-family: var(--heading);
+      font-size: 2rem;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .paywall-sub {
+      font-size: 14px;
+      color: var(--text2);
+      line-height: 1.5;
+      margin-bottom: 22px;
+    }
+
+    .paywall-price { font-size: 2.8rem; font-weight: 700; margin-bottom: 2px; }
+
+    .paywall-price-note { font-size: 12px; color: var(--text3); margin-bottom: 22px; }
+
+    .paywall-features { list-style: none; text-align: left; margin-bottom: 28px; display: inline-block; }
+
+    .paywall-features li { padding: 5px 0; font-size: 14px; color: rgba(255,255,255,0.82); }
+
+    .paywall-features li::before { content: '✓ '; color: #4caf50; font-weight: 700; }
+
+    .btn-checkout {
+      width: 100%;
+      padding: 14px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-family: var(--body);
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-bottom: 12px;
+    }
+
+    .btn-checkout:hover { background: var(--accent2); }
+
+    .paywall-secure { font-size: 12px; color: var(--text3); }
+
+    /* ============================================================
+       RESPONSIVE
+    ============================================================ */
+    @media (max-width: 768px) {
+      #heroSection { height: 65vh; }
+      .hero-content { max-width: 88%; left: 4%; bottom: 16%; }
+      .hero-arrow { display: none; }
+      .photo-card { width: 160px; height: 106px; }
+      #detailContent { flex-direction: column; max-height: 92vh; overflow-y: auto; }
+      #detailLeft { min-height: 200px; flex: none; height: 200px; }
+      #detailRight { padding: 22px 20px; }
+      .nav-logo { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav id="navbar">
+    <div class="nav-left">
+      <a href="../index.html" class="nav-back">← Templates</a>
+      <span class="nav-logo">LOVEFLIX</span>
+      <span class="nav-badge">Preview</span>
+    </div>
+    <div class="nav-right">
+      <a href="editor.html" class="btn-edit">✏ Edit</a>
+      <button id="publishBtn" class="btn-publish">Publish</button>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section id="heroSection">
+    <div id="heroTrack"></div>
+    <button id="heroPrev" class="hero-arrow hero-arrow-left">&#8249;</button>
+    <button id="heroNext" class="hero-arrow hero-arrow-right">&#8250;</button>
+    <div id="heroDots"></div>
+  </section>
+
+  <!-- Album Sections -->
+  <div id="sectionsContainer"></div>
+
+  <!-- Image Detail Panel -->
+  <div id="detailPanel">
+    <div id="detailOverlay"></div>
+    <div id="detailContent">
+      <button id="closeDetail">&#10005;</button>
+      <div id="detailLeft">
+        <img id="detailImg" alt="">
+        <div id="detailPlaceholder"></div>
+      </div>
+      <div id="detailRight">
+        <div id="detailBadge"></div>
+        <h2 id="detailTitle"></h2>
+        <div id="detailRating"></div>
+        <div id="detailCategory"></div>
+        <p id="detailDesc"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Paywall Modal -->
+  <div id="paywallModal">
+    <div id="paywallOverlay"></div>
+    <div id="paywallBox">
+      <button id="closePaywall">&#10005;</button>
+      <div class="paywall-icon">🎬</div>
+      <h2>Ready to Share?</h2>
+      <p class="paywall-sub">Publish your LoveFlix album and get a unique shareable link to send to everyone you love.</p>
+      <div class="paywall-price">€14.99</div>
+      <div class="paywall-price-note">one-time payment · no subscription</div>
+      <ul class="paywall-features">
+        <li>Public shareable link</li>
+        <li>No watermark</li>
+        <li>Mobile-friendly design</li>
+        <li>Lifetime access</li>
+        <li>Unlimited photo views</li>
+      </ul>
+      <button class="btn-checkout" id="checkoutBtn">Proceed to Checkout</button>
+      <p class="paywall-secure">🔒 Secure payment powered by Stripe</p>
+    </div>
+  </div>
+
+  <script>
+    /* ============================================================
+       ALBUM DATA (same as editor — in production this comes from DB)
+    ============================================================ */
+    const albumData = {
+      heroSlides: [
+        {
+          image: null,
+          gradient: 'linear-gradient(135deg,#1a0010 0%,#3d0020 35%,#7a002e 65%,#240010 100%)',
+          title: 'A Love Like Ours',
+          tagline: '100% Real Love',
+          description: 'Our story, our memories, and our perfectly imperfect moments captured forever.',
+          badge: 'PG-13',
+          genres: 'Romance • Comedy • Documentary',
+          rating: '★★★★★'
+        },
+        {
+          image: null,
+          gradient: 'linear-gradient(135deg,#000c1a 0%,#001535 35%,#00286b 65%,#00071a 100%)',
+          title: 'Chapter Two',
+          tagline: 'The Adventure Continues',
+          description: 'Every day is a new memory worth keeping. Here are ours, together.',
+          badge: 'PG',
+          genres: 'Adventure • Romance • Family',
+          rating: '★★★★★'
+        },
+        {
+          image: null,
+          gradient: 'linear-gradient(135deg,#0a1200 0%,#1c2e00 35%,#2e5400 65%,#0a1200 100%)',
+          title: 'Golden Moments',
+          tagline: 'A Lifetime of Laughter',
+          description: 'The little moments that became our greatest memories. Captured and cherished.',
+          badge: 'G',
+          genres: 'Comedy • Drama • Romance',
+          rating: '★★★★☆'
+        }
+      ],
+      sections: [
+        {
+          title: 'Vacation Memories',
+          photos: [
+            { gradient:'linear-gradient(135deg,#0d3a6b,#1a6fb5)', title:'Beach Getaway', description:'Our first trip to the coast. The sand, the sun, and the perfect waves.', badge:'G', category:'Travel • Romance', rating:'★★★★★' },
+            { gradient:'linear-gradient(135deg,#1a4d00,#2d8a00)', title:'Mountain Hike', description:'Reached the summit after three hours of climbing. Worth every step.', badge:'G', category:'Adventure', rating:'★★★★★' },
+            { gradient:'linear-gradient(135deg,#4d1a00,#8b3200)', title:'Golden Sunset', description:'The most beautiful sunset we have ever witnessed together.', badge:'G', category:'Romance • Nature', rating:'★★★★★' },
+            { gradient:'linear-gradient(135deg,#2d0050,#6000b0)', title:'City Lights', description:'Lost in the city, but found each other around every corner.', badge:'PG', category:'Urban • Romance', rating:'★★★★☆' },
+            { gradient:'linear-gradient(135deg,#004d4d,#007575)', title:'Lake Morning', description:'Early morning coffee by the still lake. Nothing but silence and each other.', badge:'G', category:'Nature • Calm', rating:'★★★★★' },
+            { gradient:'linear-gradient(135deg,#3d0d00,#7a1a00)', title:'Road Trip', description:'Two thousand kilometres, one playlist, and zero regrets.', badge:'PG', category:'Adventure • Travel', rating:'★★★★★' }
+          ]
+        },
+        {
+          title: 'Family Album',
+          photos: [
+            { gradient:'linear-gradient(135deg,#3d0000,#700000)', title:'Family Dinner', description:'The whole family together for the holidays. Loud, warm, and full of love.', badge:'G', category:'Family', rating:'★★★★★' },
+            { gradient:'linear-gradient(135deg,#1a3d1a,#2d6b2d)', title:'Garden Afternoon', description:'Sunday afternoon in the garden. The best kind of slow day.', badge:'G', category:'Family • Nature', rating:'★★★★☆' },
+            { gradient:'linear-gradient(135deg,#1a1a3d,#2d2d6b)', title:'Birthday Celebration', description:'Another year around the sun. Cake, candles, and a little chaos.', badge:'G', category:'Celebration', rating:'★★★★★' },
+            { gradient:'linear-gradient(135deg,#3d2200,#6b3d00)', title:'Home Cooking', description:'Grandma finally revealed the secret recipe. It only took thirty years.', badge:'G', category:'Home • Family', rating:'★★★★★' },
+            { gradient:'linear-gradient(135deg,#002233,#004466)', title:'Winter Walk', description:'Cold cheeks and warm hearts on a Sunday morning stroll.', badge:'G', category:'Family • Winter', rating:'★★★★☆' }
+          ]
+        },
+        {
+          title: 'Special Occasions',
+          photos: [
+            { gradient:'linear-gradient(135deg,#3d0030,#700050)', title:'Anniversary Dinner', description:'Five years and every single one has been better than the last.', badge:'PG-13', category:'Romance • Milestone', rating:'★★★★★' },
+            { gradient:'linear-gradient(135deg,#003d3d,#006b6b)', title:"New Year's Eve", description:'Counting down to midnight together with fireworks and champagne.', badge:'PG', category:'Celebration', rating:'★★★★☆' },
+            { gradient:'linear-gradient(135deg,#1a1a1a,#333333)', title:'Concert Night', description:'Front row seats, a favourite band, and memories that will last forever.', badge:'PG-13', category:'Entertainment', rating:'★★★★★' },
+            { gradient:'linear-gradient(135deg,#001a00,#003a00)', title:'Christmas Morning', description:'Snow outside and warmth inside. The perfect winter morning.', badge:'G', category:'Holiday • Family', rating:'★★★★★' },
+            { gradient:'linear-gradient(135deg,#3d1000,#6b2000)', title:"Valentine's Dinner", description:'Roses, candlelight, and far too much dessert. Absolutely perfect.', badge:'PG-13', category:'Romance', rating:'★★★★★' },
+            { gradient:'linear-gradient(135deg,#001a3d,#003070)', title:'Graduation Day', description:'Four years of hard work and one incredible moment of pride.', badge:'G', category:'Milestone • Achievement', rating:'★★★★★' }
+          ]
+        }
+      ]
+    };
+
+    /* ============================================================
+       STATE
+    ============================================================ */
+    let currentHeroIndex = 0;
+    let sectionOffsets = [];
+    let autoplayTimer = null;
+
+    /* ============================================================
+       HERO
+    ============================================================ */
+    function renderHero() {
+      const track = document.getElementById('heroTrack');
+      track.innerHTML = albumData.heroSlides.map((s, i) => {
+        const bg = s.image
+          ? `background-image:url('${s.image}');background-size:cover;background-position:center`
+          : `background:${s.gradient}`;
+        return `
+          <div class="hero-slide" style="${bg}">
+            <div class="hero-overlay"></div>
+            <div class="hero-content">
+              <div class="hero-badge">${s.badge}</div>
+              <h1 class="hero-title">${s.title}</h1>
+              <p class="hero-tagline">${s.tagline}</p>
+              <p class="hero-description">${s.description}</p>
+              <div class="hero-meta">
+                <span>${s.genres}</span>
+                <span class="hero-rating">${s.rating}</span>
+              </div>
+              <div class="hero-actions">
+                <button class="btn-play" onclick="openHeroDetail(${i})">&#9654; Play</button>
+                <button class="btn-info" onclick="openHeroDetail(${i})">&#9432; More Info</button>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+      updateHeroPos();
+      renderDots();
+    }
+
+    function renderDots() {
+      const c = document.getElementById('heroDots');
+      c.innerHTML = albumData.heroSlides.map((_, i) =>
+        `<div class="hero-dot${i === currentHeroIndex ? ' active' : ''}" onclick="goHero(${i})"></div>`
+      ).join('');
+    }
+
+    function goHero(i) { currentHeroIndex = i; updateHeroPos(); }
+
+    function navigateHero(dir) {
+      const n = albumData.heroSlides.length;
+      currentHeroIndex = ((currentHeroIndex + dir) % n + n) % n;
+      updateHeroPos();
+    }
+
+    function updateHeroPos() {
+      const t = document.getElementById('heroTrack');
+      if (t) t.style.transform = `translateX(-${currentHeroIndex * 100}%)`;
+      renderDots();
+    }
+
+    function startAutoplay() { autoplayTimer = setInterval(() => navigateHero(1), 6000); }
+    function stopAutoplay()  { clearInterval(autoplayTimer); }
+
+    /* ============================================================
+       SECTIONS
+    ============================================================ */
+    function renderSections() {
+      const c = document.getElementById('sectionsContainer');
+      sectionOffsets = albumData.sections.map(() => 0);
+      c.innerHTML = albumData.sections.map((sec, si) => `
+        <div class="section-block" id="sec${si}">
+          <div class="section-header">
+            <h2 class="section-title">${sec.title}</h2>
+          </div>
+          <div class="carousel-wrapper">
+            <button class="section-arrow section-arrow-left" onclick="scrollSection(${si},-1)">&#8249;</button>
+            <div class="photo-row" id="row${si}">
+              ${sec.photos.map((p, pi) => {
+                const bg = p.image
+                  ? `background-image:url('${p.image}');background-size:cover;background-position:center`
+                  : `background:${p.gradient}`;
+                return `
+                  <div class="photo-card" onclick="openPhotoDetail(${si},${pi})">
+                    <div class="photo-card-bg" style="${bg}"></div>
+                    <div class="photo-card-overlay">
+                      <div class="card-title">${p.title}</div>
+                      <div class="card-meta">${p.rating} &nbsp;&middot;&nbsp; ${p.badge}</div>
+                    </div>
+                  </div>`;
+              }).join('')}
+            </div>
+            <button class="section-arrow section-arrow-right" onclick="scrollSection(${si},1)">&#8250;</button>
+          </div>
+        </div>
+      `).join('');
+
+      /* Wave effect */
+      albumData.sections.forEach((_, si) => {
+        const row = document.getElementById(`row${si}`);
+        if (row) setupWave(row);
+      });
+    }
+
+    function setupWave(row) {
+      row.addEventListener('mouseover', e => {
+        const card = e.target.closest('.photo-card');
+        if (!card) return;
+        const cards = Array.from(row.querySelectorAll('.photo-card'));
+        const idx = cards.indexOf(card);
+        cards.forEach((c, i) => {
+          const d = Math.abs(i - idx);
+          c.style.transform = d===0?'scale(1.5)':d===1?'scale(1.2)':d===2?'scale(1.07)':'scale(1)';
+          c.style.zIndex   = d===0?'10'         :d===1?'6'          :d===2?'4'          :'1';
+        });
+      });
+      row.addEventListener('mouseleave', () => {
+        row.querySelectorAll('.photo-card').forEach(c => {
+          c.style.transform = 'scale(1)';
+          c.style.zIndex = '1';
+        });
+      });
+    }
+
+    function scrollSection(si, dir) {
+      const CARD = 206;
+      const wrapper = document.querySelector(`#sec${si} .carousel-wrapper`);
+      const visible = wrapper ? wrapper.clientWidth - 80 : 800;
+      const total = albumData.sections[si].photos.length * CARD;
+      const max = Math.max(0, total - visible);
+      sectionOffsets[si] = Math.min(max, Math.max(0, sectionOffsets[si] + dir * 3 * CARD));
+      const row = document.getElementById(`row${si}`);
+      if (row) row.style.transform = `translateX(-${sectionOffsets[si]}px)`;
+    }
+
+    /* ============================================================
+       DETAIL PANEL
+    ============================================================ */
+    function openPhotoDetail(si, pi) {
+      const p = albumData.sections[si].photos[pi];
+      openDetail({ image:p.image, gradient:p.gradient, title:p.title, badge:p.badge, rating:p.rating, category:p.category, description:p.description });
+    }
+
+    function openHeroDetail(i) {
+      const s = albumData.heroSlides[i];
+      openDetail({ image:s.image, gradient:s.gradient, title:s.title, badge:s.badge, rating:s.rating, category:s.genres, description:s.description });
+    }
+
+    function openDetail(d) {
+      const img = document.getElementById('detailImg');
+      const ph  = document.getElementById('detailPlaceholder');
+      if (d.image) {
+        img.src = d.image; img.style.display = 'block'; ph.style.display = 'none';
+      } else {
+        img.style.display = 'none'; ph.style.display = 'block';
+        ph.style.background = d.gradient || '#222';
+      }
+      document.getElementById('detailBadge').textContent    = d.badge       || '';
+      document.getElementById('detailTitle').textContent    = d.title       || '';
+      document.getElementById('detailRating').textContent   = d.rating      || '';
+      document.getElementById('detailCategory').textContent = d.category    || '';
+      document.getElementById('detailDesc').textContent     = d.description || '';
+      document.getElementById('detailPanel').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeDetail() {
+      document.getElementById('detailPanel').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    /* ============================================================
+       PAYWALL
+    ============================================================ */
+    function openPaywall()  { document.getElementById('paywallModal').classList.add('open');    document.body.style.overflow='hidden'; }
+    function closePaywall() { document.getElementById('paywallModal').classList.remove('open'); document.body.style.overflow=''; }
+
+    /* ============================================================
+       INIT
+    ============================================================ */
+    document.addEventListener('DOMContentLoaded', () => {
+      renderHero();
+      renderSections();
+
+      document.getElementById('heroPrev').addEventListener('click', () => { stopAutoplay(); navigateHero(-1); startAutoplay(); });
+      document.getElementById('heroNext').addEventListener('click', () => { stopAutoplay(); navigateHero(1);  startAutoplay(); });
+
+      const heroSec = document.getElementById('heroSection');
+      heroSec.addEventListener('mouseenter', stopAutoplay);
+      heroSec.addEventListener('mouseleave', startAutoplay);
+
+      let tStartX = 0;
+      heroSec.addEventListener('touchstart', e => { tStartX = e.touches[0].clientX; stopAutoplay(); }, { passive:true });
+      heroSec.addEventListener('touchend',   e => {
+        const dx = tStartX - e.changedTouches[0].clientX;
+        if (Math.abs(dx) > 48) navigateHero(dx > 0 ? 1 : -1);
+        startAutoplay();
+      }, { passive:true });
+
+      document.getElementById('publishBtn').addEventListener('click', openPaywall);
+      document.getElementById('closeDetail').addEventListener('click', closeDetail);
+      document.getElementById('detailOverlay').addEventListener('click', closeDetail);
+      document.getElementById('closePaywall').addEventListener('click', closePaywall);
+      document.getElementById('paywallOverlay').addEventListener('click', closePaywall);
+      document.getElementById('checkoutBtn').addEventListener('click', () => {
+        alert('Demo mode — In the live platform this would open a secure Stripe Checkout page.');
+      });
+
+      document.addEventListener('keydown', e => {
+        const pwOpen = document.getElementById('paywallModal').classList.contains('open');
+        const dpOpen = document.getElementById('detailPanel').classList.contains('open');
+        if (e.key === 'Escape') { if (pwOpen) closePaywall(); else if (dpOpen) closeDetail(); }
+        if (!dpOpen && !pwOpen) {
+          if (e.key === 'ArrowLeft')  navigateHero(-1);
+          if (e.key === 'ArrowRight') navigateHero(1);
+        }
+      });
+
+      startAutoplay();
+    });
+  </script>
+</body>
+</html>
