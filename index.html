@@ -3,35 +3,38 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AlbumCraft – Interactive Photo Album Templates</title>
+  <title>Album·Studio – Interactive Photo Album Templates</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #141414;
-      --bg2: #1a1a1a;
-      --bg3: #222;
-      --accent: #e50914;
-      --accent2: #f40612;
-      --text: #fff;
-      --text2: #b3b3b3;
-      --text3: #666;
-      --heading: 'Bebas Neue', Impact, sans-serif;
-      --body: 'Roboto', system-ui, sans-serif;
+      --cream:      #f0e9e1;
+      --cream-mid:  #e8dfd6;
+      --cream-dark: #ddd4c8;
+      --rust:       #b85c38;
+      --rust-dk:    #9a4e2e;
+      --dark:       #1c1a18;
+      --mid:        #5a5248;
+      --muted:      #9a9088;
+      --serif:      'Cormorant Garamond', Georgia, serif;
+      --sans:       'Inter', system-ui, sans-serif;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
 
-    html, body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--body);
-      scroll-behavior: smooth;
+    body {
+      background: var(--cream);
+      color: var(--dark);
+      font-family: var(--sans);
+      overflow-x: hidden;
     }
 
     a { text-decoration: none; color: inherit; }
 
-    /* ======== NAVBAR ======== */
+    /* ================================================================
+       NAV
+    ================================================================ */
     nav {
       position: sticky;
       top: 0;
@@ -39,419 +42,665 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 5%;
-      height: 64px;
-      background: rgba(20,20,20,0.97);
-      backdrop-filter: blur(10px);
-      border-bottom: 1px solid rgba(255,255,255,0.05);
+      padding: 18px 5%;
+      background: var(--cream);
+      border-bottom: 1px solid rgba(0,0,0,0.07);
     }
 
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+    .logo {
+      font-family: var(--serif);
+      font-size: 1.45rem;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      color: var(--dark);
     }
 
-    .brand-icon { font-size: 22px; }
+    .logo-dot { color: var(--rust); }
 
-    .brand-name {
-      font-family: var(--heading);
-      font-size: 26px;
-      letter-spacing: 2px;
-      color: var(--accent);
-    }
-
-    .nav-links {
-      display: flex;
-      align-items: center;
-      gap: 28px;
-    }
-
-    .nav-links a {
-      font-size: 14px;
-      color: var(--text2);
-      transition: color 0.2s;
-    }
-
-    .nav-links a:hover { color: var(--text); }
-
-    .btn-sign-in {
-      padding: 7px 18px;
-      background: rgba(255,255,255,0.1);
-      border: 1px solid rgba(255,255,255,0.25);
-      border-radius: 3px;
-      font-size: 14px;
-      color: var(--text) !important;
-      transition: background 0.2s !important;
-    }
-
-    .btn-sign-in:hover { background: rgba(255,255,255,0.2) !important; }
-
-    /* ======== HERO ======== */
-    .page-hero {
-      position: relative;
-      padding: 100px 5% 90px;
-      text-align: center;
-      overflow: hidden;
-      background: linear-gradient(180deg, #1a0008 0%, #141414 100%);
-    }
-
-    .page-hero::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(ellipse at 50% 0%, rgba(229,9,20,0.12) 0%, transparent 70%);
-    }
-
-    .page-hero h1 {
-      position: relative;
-      font-family: var(--heading);
-      font-size: clamp(2.8rem, 7vw, 5.5rem);
-      line-height: 1;
-      letter-spacing: 2px;
-      margin-bottom: 20px;
-    }
-
-    .page-hero h1 span { color: var(--accent); }
-
-    .page-hero p {
-      position: relative;
-      font-size: clamp(1rem, 2vw, 1.2rem);
-      color: var(--text2);
-      margin-bottom: 36px;
-    }
-
-    .btn-start {
-      position: relative;
+    .btn-shop {
       display: inline-block;
-      padding: 14px 36px;
-      background: var(--accent);
+      padding: 11px 24px;
+      background: var(--rust);
       color: #fff;
-      font-size: 15px;
+      font-family: var(--sans);
+      font-size: 11px;
       font-weight: 600;
-      border-radius: 3px;
-      transition: background 0.2s, transform 0.2s;
-    }
-
-    .btn-start:hover {
-      background: var(--accent2);
-      transform: translateY(-2px);
-    }
-
-    /* ======== TEMPLATES SECTION ======== */
-    .templates-section {
-      padding: 70px 5%;
-    }
-
-    .section-intro {
-      text-align: center;
-      margin-bottom: 48px;
-    }
-
-    .section-intro h2 {
-      font-family: var(--heading);
-      font-size: clamp(1.8rem, 4vw, 2.8rem);
       letter-spacing: 2px;
-      margin-bottom: 10px;
+      text-transform: uppercase;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s;
     }
 
-    .section-intro p {
-      color: var(--text2);
+    .btn-shop:hover { background: var(--rust-dk); }
+
+    /* ================================================================
+       HERO
+    ================================================================ */
+    .hero {
+      padding: 68px 5% 56px;
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 26px;
+    }
+
+    .eyebrow-rule {
+      width: 30px;
+      height: 1.5px;
+      background: var(--rust);
+      flex-shrink: 0;
+    }
+
+    .eyebrow-label {
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--rust);
+    }
+
+    .hero-h1 {
+      font-family: var(--serif);
+      font-size: clamp(3rem, 11vw, 5.2rem);
+      font-weight: 500;
+      line-height: 1.0;
+      margin-bottom: 28px;
+    }
+
+    .hero-h1-italic {
+      display: block;
+      font-style: italic;
+      color: var(--rust);
+    }
+
+    .hero-body {
       font-size: 15px;
+      font-weight: 300;
+      line-height: 1.78;
+      color: var(--mid);
+      max-width: 400px;
+      margin-bottom: 38px;
     }
 
-    .templates-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 24px;
-      max-width: 1200px;
-      margin: 0 auto;
+    .hero-btns {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-width: 220px;
     }
 
-    /* ======== TEMPLATE CARD ======== */
-    .template-card {
-      background: var(--bg2);
-      border-radius: 6px;
-      overflow: hidden;
-      transition: transform 0.3s, box-shadow 0.3s;
-      border: 1px solid rgba(255,255,255,0.05);
+    .btn-filled {
+      padding: 14px 24px;
+      background: var(--dark);
+      color: #fff;
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      border: none;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.2s;
+      display: block;
     }
 
-    .template-card:hover {
-      transform: translateY(-6px);
-      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    .btn-filled:hover { background: var(--mid); }
+
+    .btn-ghost {
+      padding: 13px 24px;
+      background: transparent;
+      color: var(--dark);
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      border: 1.5px solid var(--dark);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+      display: block;
     }
 
-    .template-card.featured {
-      border-color: rgba(229,9,20,0.3);
+    .btn-ghost:hover { background: var(--dark); color: #fff; }
+
+    /* ================================================================
+       STATS STRIP
+    ================================================================ */
+    .stats {
+      display: flex;
+      border-top: 1px solid var(--cream-dark);
+      border-bottom: 1px solid var(--cream-dark);
     }
 
-    .card-thumbnail {
+    .stat {
+      flex: 1;
+      text-align: center;
+      padding: 28px 8px;
+      border-right: 1px solid var(--cream-dark);
+    }
+
+    .stat:last-child { border-right: none; }
+
+    .stat-num {
+      display: block;
+      font-family: var(--serif);
+      font-size: 2.4rem;
+      font-weight: 500;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+
+    .stat-lbl {
+      font-size: 9.5px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ================================================================
+       ALBUM MOCKUP
+    ================================================================ */
+    .mockup-section {
+      padding: 64px 5%;
+      display: flex;
+      justify-content: center;
+    }
+
+    .mockup-wrap {
       position: relative;
-      height: 180px;
-      overflow: hidden;
+      width: 240px;
     }
 
-    .thumbnail-content {
-      width: 100%;
-      height: 100%;
-      position: relative;
-      transition: transform 0.4s;
-    }
-
-    .template-card:hover .thumbnail-content {
-      transform: scale(1.04);
-    }
-
-    /* Thumbnail backgrounds */
-    .loveflix-thumb {
-      background: linear-gradient(135deg, #1a0010 0%, #4a001a 40%, #8b0030 80%, #1a0008 100%);
-    }
-
-    .wedding-thumb {
-      background: linear-gradient(135deg, #1a1200 0%, #3d2d00 40%, #6b5000 80%, #1a1200 100%);
-    }
-
-    .birthday-thumb {
-      background: linear-gradient(135deg, #001a3d 0%, #002d6b 40%, #004db0 80%, #001520 100%);
-    }
-
-    .travel-thumb {
-      background: linear-gradient(135deg, #001a10 0%, #003a22 40%, #006040 80%, #001210 100%);
-    }
-
-    .thumb-overlay {
+    .mockup-back {
       position: absolute;
       inset: 0;
-      background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 60%);
+      background: var(--cream-mid);
+      border: 7px solid var(--cream-dark);
+      transform: rotate(4deg) translate(10px, -6px);
+      z-index: 0;
     }
 
-    .thumb-label {
+    .mockup-front {
+      position: relative;
+      z-index: 1;
+      background: #fff;
+      border: 7px solid #fff;
+      box-shadow: 0 10px 48px rgba(0,0,0,0.13);
+    }
+
+    .mockup-main {
+      background: #b2c8be;
+      height: 148px;
+      margin-bottom: 5px;
+    }
+
+    .mockup-row {
+      display: flex;
+      gap: 5px;
+    }
+
+    .mockup-thumb {
+      flex: 1;
+      height: 72px;
+    }
+
+    .mockup-thumb:nth-child(1) { background: #dfc8be; }
+    .mockup-thumb:nth-child(2) { background: #cfa49a; }
+    .mockup-thumb:nth-child(3) { background: #ede0da; }
+
+    .mockup-badge {
       position: absolute;
-      inset: 0;
+      bottom: -14px;
+      right: -14px;
+      z-index: 3;
+      width: 66px;
+      height: 66px;
+      background: var(--rust);
+      border-radius: 50%;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-    }
-
-    .thumb-logo {
-      font-family: var(--heading);
-      font-size: 2rem;
-      letter-spacing: 4px;
-      color: var(--accent);
-      text-shadow: 0 2px 12px rgba(0,0,0,0.8);
-    }
-
-    .thumb-stars {
-      font-size: 14px;
-      color: #f5c518;
-      letter-spacing: 2px;
-    }
-
-    .thumb-badge {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      padding: 3px 10px;
-      background: var(--accent);
       color: #fff;
-      font-size: 11px;
+      font-size: 14px;
       font-weight: 700;
-      border-radius: 2px;
-      letter-spacing: 1px;
+      line-height: 1.2;
+      text-align: center;
+    }
+
+    .mockup-badge-lbl {
+      font-size: 7.5px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
       text-transform: uppercase;
+      opacity: 0.85;
     }
 
-    .coming-soon-badge {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      padding: 3px 10px;
-      background: rgba(255,255,255,0.15);
-      border: 1px solid rgba(255,255,255,0.2);
-      color: var(--text2);
-      font-size: 11px;
-      border-radius: 2px;
-      letter-spacing: 1px;
+    /* ================================================================
+       TICKER
+    ================================================================ */
+    .ticker {
+      background: var(--dark);
+      padding: 11px 0;
+      overflow: hidden;
+    }
+
+    .ticker-track {
+      display: flex;
+      white-space: nowrap;
+      animation: tickerScroll 22s linear infinite;
+    }
+
+    .ticker-item {
+      padding: 0 24px;
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 2.5px;
       text-transform: uppercase;
+      color: rgba(255,255,255,0.75);
     }
 
-    .card-info {
-      padding: 20px;
+    .ticker-dot { color: var(--rust); }
+
+    @keyframes tickerScroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
     }
 
-    .card-header {
+    /* ================================================================
+       TEMPLATES SECTION
+    ================================================================ */
+    .templates {
+      padding: 60px 5% 16px;
+    }
+
+    .sec-hdr {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .sec-title {
+      font-family: var(--serif);
+      font-size: 2rem;
+      font-weight: 500;
+    }
+
+    .sec-link {
+      font-size: 13px;
+      color: var(--mid);
+      border-bottom: 1px solid var(--muted);
+      padding-bottom: 1px;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .sec-link:hover { color: var(--rust); border-color: var(--rust); }
+
+    /* LoveFlix Card */
+    .card-lf {
+      background: #141414;
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+
+    .lf-preview {
+      padding: 22px 20px 18px;
+    }
+
+    .lf-topbar {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 22px;
+    }
+
+    .lf-logo {
+      font-family: var(--serif);
+      font-size: 1.15rem;
+      font-weight: 600;
+      letter-spacing: 3px;
+      color: #e50914;
+    }
+
+    .lf-navlink {
+      font-size: 11px;
+      color: #b3b3b3;
+    }
+
+    .lf-title {
+      font-family: var(--serif);
+      font-size: 1.75rem;
+      font-weight: 400;
+      color: #fff;
+      margin-bottom: 14px;
+    }
+
+    .lf-actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .lf-btn {
+      padding: 6px 14px;
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 600;
+      border: none;
+      cursor: default;
+      border-radius: 2px;
+    }
+
+    .lf-play { background: #fff; color: #000; }
+    .lf-info { background: rgba(109,109,110,0.65); color: #fff; }
+
+    .lf-row-lbl {
+      font-size: 11px;
+      color: #b3b3b3;
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+    }
+
+    .lf-row {
+      display: flex;
+      gap: 4px;
+    }
+
+    .lf-thumb {
+      flex: 1;
+      height: 54px;
+      border-radius: 2px;
+    }
+
+    .card-footer {
+      padding: 16px 20px 20px;
+      background: #0a0a0a;
+    }
+
+    .card-tags {
+      display: flex;
+      gap: 8px;
       margin-bottom: 10px;
     }
 
-    .card-header h3 {
-      font-family: var(--heading);
-      font-size: 1.4rem;
-      letter-spacing: 1px;
-    }
-
-    .card-tag {
-      font-size: 11px;
-      padding: 2px 8px;
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 20px;
-      color: var(--text2);
-    }
-
-    .card-info p {
-      font-size: 13px;
-      color: var(--text2);
-      line-height: 1.6;
-      margin-bottom: 18px;
-    }
-
-    .card-actions {
-      display: flex;
-      gap: 10px;
-    }
-
-    .btn-preview {
-      flex: 1;
-      padding: 9px 16px;
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 3px;
-      color: var(--text2);
-      font-size: 13px;
-      text-align: center;
-      transition: background 0.2s, color 0.2s;
-    }
-
-    .btn-preview:hover { background: rgba(255,255,255,0.15); color: var(--text); }
-
-    .btn-customize {
-      flex: 2;
-      padding: 9px 16px;
-      background: var(--accent);
-      border-radius: 3px;
+    .tag-rust {
+      padding: 4px 10px;
+      background: var(--rust);
       color: #fff;
-      font-size: 13px;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .tag-outline {
+      padding: 4px 10px;
+      border: 1.5px solid rgba(255,255,255,0.45);
+      color: rgba(255,255,255,0.75);
+      font-size: 10.5px;
       font-weight: 600;
-      text-align: center;
-      transition: background 0.2s;
+      letter-spacing: 0.5px;
     }
 
-    .btn-customize:hover { background: var(--accent2); }
-
-    .btn-notify {
-      flex: 1;
-      padding: 9px 16px;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 3px;
-      color: var(--text3);
-      font-size: 13px;
-      cursor: not-allowed;
-      width: 100%;
-      font-family: var(--body);
+    .card-name {
+      font-family: var(--serif);
+      font-size: 1.85rem;
+      font-weight: 500;
+      color: #fff;
+      line-height: 1.1;
+      margin-bottom: 6px;
     }
 
-    .template-card.coming-soon { opacity: 0.7; }
-    .template-card.coming-soon:hover { opacity: 0.85; }
-
-    /* ======== HOW IT WORKS ======== */
-    .how-it-works {
-      padding: 80px 5%;
-      background: var(--bg2);
-    }
-
-    .how-it-works h2 {
-      font-family: var(--heading);
-      font-size: clamp(1.8rem, 4vw, 2.8rem);
-      letter-spacing: 2px;
-      text-align: center;
-      margin-bottom: 50px;
-    }
-
-    .steps {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 32px;
-      max-width: 1000px;
-      margin: 0 auto;
-    }
-
-    .step {
-      text-align: center;
-      padding: 24px;
-    }
-
-    .step-icon {
-      font-size: 2.5rem;
+    .card-meta {
+      font-size: 12px;
+      color: rgba(255,255,255,0.45);
       margin-bottom: 16px;
     }
 
-    .step h3 {
-      font-size: 1rem;
-      font-weight: 700;
-      margin-bottom: 10px;
-      color: var(--text);
-    }
-
-    .step p {
-      font-size: 13px;
-      color: var(--text2);
-      line-height: 1.7;
-    }
-
-    /* ======== FOOTER ======== */
-    footer {
-      padding: 40px 5%;
-      border-top: 1px solid rgba(255,255,255,0.06);
-    }
-
-    .footer-content {
+    .card-btns {
       display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 32px;
-      flex-wrap: wrap;
+      gap: 8px;
     }
 
-    .footer-brand .brand-name {
-      font-family: var(--heading);
-      font-size: 22px;
+    .btn-card-rust {
+      padding: 10px 20px;
+      background: var(--rust);
+      color: #fff;
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: inline-block;
+    }
+
+    .btn-card-rust:hover { background: var(--rust-dk); }
+
+    .btn-card-ghost {
+      padding: 10px 20px;
+      background: transparent;
+      color: rgba(255,255,255,0.6);
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      border: 1px solid rgba(255,255,255,0.25);
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-block;
+    }
+
+    .btn-card-ghost:hover { background: rgba(255,255,255,0.08); }
+
+    /* ================================================================
+       MORE TEMPLATES
+    ================================================================ */
+    .more-templates {
+      padding: 0 5% 16px;
+    }
+
+    /* Graduation Card */
+    .card-grad {
+      background: #0d1b3a;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+
+    .grad-body {
+      padding: 28px 20px 22px;
+      min-height: 180px;
+    }
+
+    .grad-badge {
+      display: inline-block;
+      padding: 5px 12px;
+      background: #c4a55a;
+      color: #fff;
+      font-family: var(--sans);
+      font-size: 10.5px;
+      font-weight: 700;
       letter-spacing: 2px;
-      color: var(--accent);
-      display: block;
+      text-transform: uppercase;
+      margin-bottom: 22px;
+    }
+
+    .grad-name {
+      font-family: var(--serif);
+      font-size: 2rem;
+      font-style: italic;
+      color: #c4a55a;
+      margin-bottom: 10px;
+    }
+
+    .grad-line {
+      height: 1px;
+      background: rgba(255,255,255,0.1);
+      margin: 8px 0;
+    }
+
+    .grad-footer {
+      padding: 12px 20px;
+      background: rgba(0,0,0,0.25);
+      font-size: 12px;
+      color: rgba(255,255,255,0.4);
+    }
+
+    /* Wedding Card */
+    .card-wed {
+      background: #1a0f08;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+
+    .wed-body {
+      padding: 28px 20px 22px;
+      min-height: 160px;
+    }
+
+    .wed-badge {
+      display: inline-block;
+      padding: 5px 12px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: rgba(255,255,255,0.6);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 22px;
+    }
+
+    .wed-name {
+      font-family: var(--serif);
+      font-size: 1.8rem;
+      font-style: italic;
+      color: rgba(255,255,255,0.85);
       margin-bottom: 8px;
     }
 
-    .footer-brand p {
+    .wed-footer {
+      padding: 12px 20px;
+      background: rgba(0,0,0,0.2);
+      font-size: 12px;
+      color: rgba(255,255,255,0.35);
+    }
+
+    /* ================================================================
+       COMING SOON
+    ================================================================ */
+    .coming-soon {
+      padding: 80px 5%;
+      text-align: center;
+    }
+
+    .cs-icon {
+      font-size: 20px;
+      color: var(--muted);
+      margin-bottom: 14px;
+      display: block;
+    }
+
+    .cs-text {
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ================================================================
+       HOW IT WORKS
+    ================================================================ */
+    .how {
+      padding: 68px 5%;
+      background: var(--cream-mid);
+    }
+
+    .how-steps {
+      margin-top: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+    }
+
+    .how-step {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+
+    .step-num {
+      font-family: var(--serif);
+      font-size: 2.2rem;
+      color: var(--rust);
+      line-height: 1;
+      flex-shrink: 0;
+      width: 36px;
+    }
+
+    .step-ttl {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .step-txt {
       font-size: 13px;
-      color: var(--text3);
+      color: var(--mid);
+      line-height: 1.65;
+      font-weight: 300;
+    }
+
+    /* ================================================================
+       FOOTER
+    ================================================================ */
+    footer {
+      padding: 28px 5%;
+      border-top: 1px solid var(--cream-dark);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .footer-logo {
+      font-family: var(--serif);
+      font-size: 1.1rem;
+      font-weight: 400;
     }
 
     .footer-links {
       display: flex;
-      gap: 24px;
-      flex-wrap: wrap;
+      gap: 22px;
     }
 
     .footer-links a {
-      font-size: 13px;
-      color: var(--text3);
+      font-size: 12px;
+      color: var(--muted);
       transition: color 0.2s;
     }
 
-    .footer-links a:hover { color: var(--text2); }
+    .footer-links a:hover { color: var(--dark); }
 
-    /* ======== RESPONSIVE ======== */
-    @media (max-width: 600px) {
-      .nav-links { gap: 16px; }
-      .nav-links a:not(.btn-sign-in) { display: none; }
-      .page-hero { padding: 60px 5% 60px; }
-      .card-actions { flex-direction: column; }
+    /* ================================================================
+       RESPONSIVE
+    ================================================================ */
+    @media (max-width: 480px) {
+      .hero-h1 { font-size: 3rem; }
+      .card-btns { flex-direction: column; }
+      .sec-hdr { flex-direction: column; gap: 8px; }
     }
   </style>
 </head>
@@ -459,170 +708,231 @@
 
   <!-- Navigation -->
   <nav>
-    <div class="brand">
-      <span class="brand-icon">🎬</span>
-      <span class="brand-name">AlbumCraft</span>
-    </div>
-    <div class="nav-links">
-      <a href="#templates">Templates</a>
-      <a href="#how-it-works">How It Works</a>
-      <a href="#" class="btn-sign-in">Sign In</a>
-    </div>
+    <div class="logo">Album<span class="logo-dot">·</span>Studio</div>
+    <a href="loveflix_template/editor.html" class="btn-shop">Shop Now</a>
   </nav>
 
-  <!-- Page Hero -->
-  <section class="page-hero">
-    <h1>Create Your Interactive<br><span>Photo Album</span></h1>
-    <p>Choose a template. Upload your photos. Preview for free. Publish when you're ready.</p>
-    <a href="#templates" class="btn-start">Explore Templates ↓</a>
-  </section>
-
-  <!-- Templates -->
-  <section id="templates" class="templates-section">
-    <div class="section-intro">
-      <h2>Choose Your Template</h2>
-      <p>Select a design and start customizing your album for free — no account needed</p>
+  <!-- Hero -->
+  <section class="hero">
+    <div class="eyebrow">
+      <div class="eyebrow-rule"></div>
+      <span class="eyebrow-label">Interactive Templates</span>
     </div>
-
-    <div class="templates-grid">
-
-      <!-- LoveFlix -->
-      <div class="template-card featured">
-        <div class="card-thumbnail">
-          <div class="thumbnail-content loveflix-thumb">
-            <div class="thumb-overlay"></div>
-            <div class="thumb-label">
-              <div class="thumb-logo">LOVEFLIX</div>
-              <div class="thumb-stars">★★★★★</div>
-            </div>
-            <div class="thumb-badge">Featured</div>
-          </div>
-        </div>
-        <div class="card-info">
-          <div class="card-header">
-            <h3>LoveFlix</h3>
-            <span class="card-tag">Couples</span>
-          </div>
-          <p>Cinematic Netflix-inspired couple photo album. Your love story, movie-style with hero carousel, photo galleries, and a stunning detail view.</p>
-          <div class="card-actions">
-            <a href="loveflix_template/preview.html" class="btn-preview">Preview</a>
-            <a href="loveflix_template/editor.html" class="btn-customize">Customize →</a>
-          </div>
-        </div>
-      </div>
-
-      <!-- WeddingFlix -->
-      <div class="template-card coming-soon">
-        <div class="card-thumbnail">
-          <div class="thumbnail-content wedding-thumb">
-            <div class="thumb-overlay"></div>
-            <div class="thumb-label">
-              <div class="thumb-logo" style="color: #f0e0b0; font-size: 1.7rem;">WEDDINGFLIX</div>
-            </div>
-            <div class="coming-soon-badge">Coming Soon</div>
-          </div>
-        </div>
-        <div class="card-info">
-          <div class="card-header">
-            <h3>WeddingFlix</h3>
-            <span class="card-tag">Wedding</span>
-          </div>
-          <p>Elegant wedding album with ceremony gallery, highlight reel, and guest memory wall.</p>
-          <div class="card-actions">
-            <button class="btn-notify" disabled>Notify Me</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Birthday -->
-      <div class="template-card coming-soon">
-        <div class="card-thumbnail">
-          <div class="thumbnail-content birthday-thumb">
-            <div class="thumb-overlay"></div>
-            <div class="thumb-label">
-              <div class="thumb-logo" style="color: #ffd700; font-size: 1.5rem;">BIRTHDAYFLIX</div>
-            </div>
-            <div class="coming-soon-badge">Coming Soon</div>
-          </div>
-        </div>
-        <div class="card-info">
-          <div class="card-header">
-            <h3>Birthday Album</h3>
-            <span class="card-tag">Birthday</span>
-          </div>
-          <p>Vibrant birthday celebration album with party photos and heartfelt wishes from the people you love.</p>
-          <div class="card-actions">
-            <button class="btn-notify" disabled>Notify Me</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Travel -->
-      <div class="template-card coming-soon">
-        <div class="card-thumbnail">
-          <div class="thumbnail-content travel-thumb">
-            <div class="thumb-overlay"></div>
-            <div class="thumb-label">
-              <div class="thumb-logo" style="color: #90e0ef; font-size: 1.7rem;">TRAVELFLIX</div>
-            </div>
-            <div class="coming-soon-badge">Coming Soon</div>
-          </div>
-        </div>
-        <div class="card-info">
-          <div class="card-header">
-            <h3>Travel Memories</h3>
-            <span class="card-tag">Travel</span>
-          </div>
-          <p>Map-driven travel album with journey timelines, destination cards, and adventure stories.</p>
-          <div class="card-actions">
-            <button class="btn-notify" disabled>Notify Me</button>
-          </div>
-        </div>
-      </div>
-
+    <h1 class="hero-h1">
+      Memories that<br>
+      <span class="hero-h1-italic">look the part.</span>
+    </h1>
+    <p class="hero-body">Beautiful photo-album websites, ready to customise. Upload your photos, personalise the content, and share your story — no design experience needed.</p>
+    <div class="hero-btns">
+      <a href="#templates" class="btn-filled">Browse Templates</a>
+      <a href="#how-it-works" class="btn-ghost">How It Works</a>
     </div>
   </section>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat">
+      <span class="stat-num">3+</span>
+      <span class="stat-lbl">Templates</span>
+    </div>
+    <div class="stat">
+      <span class="stat-num">∞</span>
+      <span class="stat-lbl">Customisable</span>
+    </div>
+    <div class="stat">
+      <span class="stat-num">€10</span>
+      <span class="stat-lbl">Starting From</span>
+    </div>
+  </div>
+
+  <!-- Album Mockup -->
+  <div class="mockup-section">
+    <div class="mockup-wrap">
+      <div class="mockup-back"></div>
+      <div class="mockup-front">
+        <div class="mockup-main"></div>
+        <div class="mockup-row">
+          <div class="mockup-thumb"></div>
+          <div class="mockup-thumb"></div>
+          <div class="mockup-thumb"></div>
+        </div>
+      </div>
+      <div class="mockup-badge">
+        5★<br><span class="mockup-badge-lbl">Rated</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ticker -->
+  <div class="ticker">
+    <div class="ticker-track">
+      <span class="ticker-item">Interactive Templates</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Upload Your Photos</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">No Design Experience</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Mobile Friendly</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Publish Online</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Share Your Story</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">One-Time Payment</span><span class="ticker-dot">·</span>
+      <!-- duplicate for seamless loop -->
+      <span class="ticker-item">Interactive Templates</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Upload Your Photos</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">No Design Experience</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Mobile Friendly</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Publish Online</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Share Your Story</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">One-Time Payment</span><span class="ticker-dot">·</span>
+    </div>
+  </div>
+
+  <!-- Templates Section -->
+  <section id="templates" class="templates">
+    <div class="sec-hdr">
+      <h2 class="sec-title">Ready to use</h2>
+      <a href="#" class="sec-link">View all templates →</a>
+    </div>
+
+    <!-- LoveFlix Card -->
+    <div class="card-lf">
+      <div class="lf-preview">
+        <div class="lf-topbar">
+          <span class="lf-logo">LOVEFLIX</span>
+          <span class="lf-navlink">Home</span>
+          <span class="lf-navlink">Albums</span>
+        </div>
+        <div class="lf-title">Your Love Story</div>
+        <div class="lf-actions">
+          <button class="lf-btn lf-play">▶ Play</button>
+          <button class="lf-btn lf-info">ⓘ Info</button>
+        </div>
+        <div class="lf-row-lbl">Vacation Memories</div>
+        <div class="lf-row">
+          <div class="lf-thumb" style="background:linear-gradient(135deg,#0d3a6b,#1a6fb5)"></div>
+          <div class="lf-thumb" style="background:linear-gradient(135deg,#1a4d00,#2d8a00)"></div>
+          <div class="lf-thumb" style="background:linear-gradient(135deg,#4d1a00,#8b3200)"></div>
+          <div class="lf-thumb" style="background:linear-gradient(135deg,#2d0050,#6000b0)"></div>
+        </div>
+      </div>
+      <div class="card-footer">
+        <div class="card-tags">
+          <span class="tag-rust">★ Featured</span>
+          <span class="tag-outline">Interactive</span>
+        </div>
+        <div class="card-name">LoveFlix — Netflix-Style Album</div>
+        <div class="card-meta">€14.99 &nbsp;·&nbsp; Couples &nbsp;·&nbsp; Interactive HTML</div>
+        <div class="card-btns">
+          <a href="loveflix_template/editor.html" class="btn-card-rust">Customise →</a>
+          <a href="loveflix_template/preview.html" class="btn-card-ghost">Preview</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- More Templates -->
+  <section class="more-templates">
+    <div class="sec-hdr">
+      <h2 class="sec-title">More templates</h2>
+    </div>
+
+    <!-- Graduation Card -->
+    <div class="card-grad">
+      <div class="grad-body">
+        <div class="grad-badge">Graduation</div>
+        <div class="grad-name">Your Name</div>
+        <div class="grad-line"></div>
+        <div class="grad-line" style="width:55%; opacity:0.4;"></div>
+      </div>
+      <div class="grad-footer">
+        €16 &nbsp;·&nbsp; Ceremony &nbsp;·&nbsp; Interactive HTML &nbsp;·&nbsp; <em>Coming Soon</em>
+      </div>
+    </div>
+
+    <!-- Wedding Card -->
+    <div class="card-wed">
+      <div class="wed-body">
+        <div class="wed-badge">Wedding</div>
+        <div class="wed-name">Together Forever</div>
+        <div class="grad-line"></div>
+        <div class="grad-line" style="width:65%; opacity:0.3;"></div>
+      </div>
+      <div class="wed-footer">
+        €16 &nbsp;·&nbsp; Ceremony &amp; Reception &nbsp;·&nbsp; Interactive HTML &nbsp;·&nbsp; <em>Coming Soon</em>
+      </div>
+    </div>
+  </section>
+
+  <!-- Coming Soon -->
+  <div class="coming-soon">
+    <span class="cs-icon">✦</span>
+    <span class="cs-text">More Coming Soon</span>
+  </div>
+
+  <!-- Second Ticker (reversed) -->
+  <div class="ticker">
+    <div class="ticker-track" style="animation-direction:reverse; animation-duration:26s;">
+      <span class="ticker-item">Wedding Album</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Birthday Party</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Travel Memories</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Baby Album</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Anniversary</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Family Timeline</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Graduation</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Wedding Album</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Birthday Party</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Travel Memories</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Baby Album</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Anniversary</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Family Timeline</span><span class="ticker-dot">·</span>
+      <span class="ticker-item">Graduation</span><span class="ticker-dot">·</span>
+    </div>
+  </div>
 
   <!-- How It Works -->
-  <section id="how-it-works" class="how-it-works">
-    <h2>How It Works</h2>
-    <div class="steps">
-      <div class="step">
-        <div class="step-icon">🎨</div>
-        <h3>1. Choose a Template</h3>
-        <p>Pick from our collection of beautifully designed album templates, each with a unique visual style.</p>
+  <section id="how-it-works" class="how">
+    <div class="eyebrow">
+      <div class="eyebrow-rule"></div>
+      <span class="eyebrow-label">The Process</span>
+    </div>
+    <h2 class="sec-title" style="margin-top:10px;">How it works</h2>
+    <div class="how-steps">
+      <div class="how-step">
+        <span class="step-num">01</span>
+        <div>
+          <div class="step-ttl">Choose your template</div>
+          <div class="step-txt">Browse the collection and pick the style that fits your story best.</div>
+        </div>
       </div>
-      <div class="step">
-        <div class="step-icon">📸</div>
-        <h3>2. Upload &amp; Customize</h3>
-        <p>Add your own photos, edit titles, descriptions, genres, and ratings — all inside the browser.</p>
+      <div class="how-step">
+        <span class="step-num">02</span>
+        <div>
+          <div class="step-ttl">Upload &amp; customise</div>
+          <div class="step-txt">Add your photos, edit all text, and make it completely yours — no code needed.</div>
+        </div>
       </div>
-      <div class="step">
-        <div class="step-icon">👁️</div>
-        <h3>3. Preview Your Album</h3>
-        <p>Switch to preview mode to see exactly how your finished album will look to others.</p>
+      <div class="how-step">
+        <span class="step-num">03</span>
+        <div>
+          <div class="step-ttl">Preview your album</div>
+          <div class="step-txt">Switch to preview mode to see exactly how it looks before publishing.</div>
+        </div>
       </div>
-      <div class="step">
-        <div class="step-icon">🚀</div>
-        <h3>4. Publish &amp; Share</h3>
-        <p>Pay once to publish with a shareable public link. No subscriptions, no watermarks.</p>
+      <div class="how-step">
+        <span class="step-num">04</span>
+        <div>
+          <div class="step-ttl">Publish &amp; share</div>
+          <div class="step-txt">Pay once to get a public shareable link. No watermarks, no subscription.</div>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- Footer -->
   <footer>
-    <div class="footer-content">
-      <div class="footer-brand">
-        <span class="brand-name">AlbumCraft</span>
-        <p>Interactive photo albums, beautifully designed.</p>
-      </div>
-      <div class="footer-links">
-        <a href="#">About</a>
-        <a href="#">Pricing</a>
-        <a href="#">Privacy Policy</a>
-        <a href="#">Terms of Use</a>
-      </div>
+    <div class="footer-logo">Album<span class="logo-dot">·</span>Studio</div>
+    <div class="footer-links">
+      <a href="#">About</a>
+      <a href="#">Pricing</a>
+      <a href="#">Privacy</a>
+      <a href="#">Terms</a>
     </div>
   </footer>
 
