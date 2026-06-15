@@ -492,6 +492,26 @@
     body.preview-mode .photo-card { cursor: pointer; }
     body:not(.preview-mode) .photo-card { cursor: default; }
 
+    /* Freeze all card animations in edit mode */
+    body:not(.preview-mode) .photo-card:hover .photo-card-bg  { transform: none; }
+    body:not(.preview-mode) .photo-card:hover .photo-card-overlay { opacity: 0; }
+    body:not(.preview-mode) .photo-card { transition: none; }
+
+    /* Share / Open Preview button */
+    .btn-share {
+      padding: 7px 16px;
+      background: rgba(255,255,255,0.07);
+      color: var(--text2);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 3px;
+      font-family: var(--body);
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+    .btn-share:hover { background: rgba(255,255,255,0.15); color: var(--text); }
+
     /* ============================================================
        IMAGE DETAIL PANEL
     ============================================================ */
@@ -805,6 +825,7 @@
     </div>
     <div class="nav-right">
       <button id="toggleModeBtn" class="btn-toggle">▶ Preview</button>
+      <button id="shareLinkBtn" class="btn-share">↗ Open Preview</button>
       <button id="publishBtn" class="btn-publish">Publish</button>
     </div>
   </nav>
@@ -985,6 +1006,7 @@
         el.addEventListener('input', () => {
           const si = +el.dataset.si, f = el.dataset.f;
           albumData.heroSlides[si][f] = el.textContent;
+          saveToStorage();
         });
         el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
       });
@@ -1003,6 +1025,7 @@
             slide.style.backgroundSize = 'cover';
             slide.style.backgroundPosition = 'center';
             slide.style.background = '';
+            saveToStorage();
           };
           rd.readAsDataURL(f);
         });
@@ -1036,7 +1059,7 @@
       renderDots();
     }
 
-    function startAutoplay() { autoplayTimer = setInterval(() => navigateHero(1), 6000); }
+    function startAutoplay() { if (!editMode) autoplayTimer = setInterval(() => navigateHero(1), 6000); }
     function stopAutoplay()  { clearInterval(autoplayTimer); }
 
     /* ============================================================
@@ -1066,7 +1089,7 @@
       albumData.sections.forEach((_, si) => {
         const el = document.querySelector(`#sec${si} .section-title`);
         if (el) {
-          el.addEventListener('input', () => { albumData.sections[si].title = el.textContent; });
+          el.addEventListener('input', () => { albumData.sections[si].title = el.textContent; saveToStorage(); });
           el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
         }
         /* Photo upload */
@@ -1109,6 +1132,7 @@
     ============================================================ */
     function setupWave(row) {
       row.addEventListener('mouseover', e => {
+        if (editMode) return; /* no wave effect while editing */
         const card = e.target.closest('.photo-card');
         if (!card) return;
         const cards = Array.from(row.querySelectorAll('.photo-card'));
@@ -1162,7 +1186,7 @@
             rating: '★★★★★'
           });
           done++;
-          if (done === total) refreshRow(si);
+          if (done === total) { refreshRow(si); saveToStorage(); }
         };
         rd.readAsDataURL(file);
       });
@@ -1262,6 +1286,7 @@
       document.body.style.overflow = '';
       selSection = selPhoto = selHeroIndex = -1;
       selIsHero = false;
+      saveToStorage();
     }
 
     /* ============================================================
@@ -1278,6 +1303,28 @@
     }
 
     /* ============================================================
+       STORAGE — save edits so preview.html can read them
+    ============================================================ */
+    function saveToStorage() {
+      try {
+        localStorage.setItem('loveflix_albumData', JSON.stringify(albumData));
+      } catch(e) {
+        /* quota exceeded — retry without uploaded images */
+        try {
+          const lite = JSON.parse(JSON.stringify(albumData));
+          lite.heroSlides.forEach(s => { s.image = null; });
+          lite.sections.forEach(sec => sec.photos.forEach(p => { p.image = null; }));
+          localStorage.setItem('loveflix_albumData', JSON.stringify(lite));
+        } catch(e2) { /* give up silently */ }
+      }
+    }
+
+    function openSharePreview() {
+      saveToStorage();
+      window.open('preview.html', '_blank');
+    }
+
+    /* ============================================================
        EDIT / PREVIEW MODE
     ============================================================ */
     function setMode(isEdit) {
@@ -1288,6 +1335,9 @@
       document.body.classList.toggle('preview-mode', !isEdit);
       const btn = document.getElementById('toggleModeBtn');
       btn.textContent = isEdit ? '▶ Preview' : '✏ Edit';
+      /* animations only live in preview mode */
+      if (isEdit) { stopAutoplay(); } else { startAutoplay(); }
+      saveToStorage();
     }
 
     /* ============================================================
@@ -1317,6 +1367,9 @@
 
       /* Mode toggle */
       document.getElementById('toggleModeBtn').addEventListener('click', () => setMode(!editMode));
+
+      /* Share / open preview */
+      document.getElementById('shareLinkBtn').addEventListener('click', openSharePreview);
 
       /* Publish */
       document.getElementById('publishBtn').addEventListener('click', openPaywall);

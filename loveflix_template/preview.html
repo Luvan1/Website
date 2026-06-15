@@ -691,9 +691,16 @@
 
   <script>
     /* ============================================================
-       ALBUM DATA (same as editor — in production this comes from DB)
+       ALBUM DATA — loaded from localStorage (saved by editor) or fallback
     ============================================================ */
-    const albumData = {
+    const _saved = (() => {
+      try {
+        const d = localStorage.getItem('loveflix_albumData');
+        return d ? JSON.parse(d) : null;
+      } catch(e) { return null; }
+    })();
+
+    const _defaultData = {
       heroSlides: [
         {
           image: null,
@@ -761,6 +768,8 @@
         }
       ]
     };
+
+    const albumData = _saved || _defaultData;
 
     /* ============================================================
        STATE
