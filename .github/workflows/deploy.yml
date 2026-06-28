@@ -2,10 +2,11 @@ name: Deploy Travel Book Covers to GitHub Pages
 
 on:
   push:
-    branches: [claude/travel-book-covers-site-cliw92, main]
+    branches: [main]
     paths:
       - 'travel-book-covers/**'
       - '.github/workflows/deploy.yml'
+      - 'index.html'
   workflow_dispatch:
 
 permissions:
@@ -27,7 +28,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: travel-book-covers/package-lock.json
 
@@ -39,13 +40,13 @@ jobs:
         working-directory: travel-book-covers
         run: npm run build
 
-      - name: Copy root site files
+      - name: Copy root site files into dist
         run: |
           cp index.html travel-book-covers/dist/
           cp -r loveflix_template travel-book-covers/dist/ 2>/dev/null || true
 
       - name: Setup Pages
-        uses: actions/configure-pages@v4
+        uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
