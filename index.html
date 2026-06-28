@@ -596,6 +596,49 @@
       color: rgba(255,255,255,0.35);
     }
 
+    /* TravelBook Card */
+    .card-tb {
+      background: #1a0f08;
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+
+    .tb-preview {
+      padding: 0;
+      position: relative;
+      height: 200px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 2px;
+      overflow: hidden;
+    }
+
+    .tb-dest {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .tb-dest::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 4px;
+      opacity: .5;
+    }
+
+    .tb-dest .td-icon { font-size: 22px; }
+    .tb-dest .td-name { font-size: 10px; font-weight: 800; letter-spacing: 2px; line-height: 1; }
+    .tb-dest .td-year { font-size: 8px; font-weight: 300; letter-spacing: 1px; opacity: .55; }
+
     /* ================================================================
        COMING SOON
     ================================================================ */
@@ -822,6 +865,44 @@
         <div class="card-btns">
           <a href="loveflix_template/editor.html" class="btn-card-rust">Customise →</a>
           <a href="loveflix_template/preview.html" class="btn-card-ghost">Preview</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- TravelBook Card -->
+    <div class="card-tb">
+      <div class="tb-preview">
+        <div class="tb-dest" style="background:#BC002D">
+          <div class="td-icon">⛩️</div>
+          <div class="td-name">JAPAN</div>
+          <div class="td-year">2025</div>
+        </div>
+        <div class="tb-dest" style="background:#FF6B2B">
+          <div class="td-icon">🍊</div>
+          <div class="td-name">SICILY</div>
+          <div class="td-year">2024</div>
+        </div>
+        <div class="tb-dest" style="background:#006847">
+          <div class="td-icon">🌮</div>
+          <div class="td-name">CANCUN</div>
+          <div class="td-year">2025</div>
+        </div>
+        <div class="tb-dest" style="background:#002868">
+          <div class="td-icon">🌌</div>
+          <div class="td-name">NORWAY</div>
+          <div class="td-year">2024</div>
+        </div>
+      </div>
+      <div class="card-footer">
+        <div class="card-tags">
+          <span class="tag-rust">★ New</span>
+          <span class="tag-outline">40+ Destinations</span>
+        </div>
+        <div class="card-name">TravelBook — Destination Album</div>
+        <div class="card-meta">€14.99 &nbsp;·&nbsp; Travel &nbsp;·&nbsp; Country Themes &nbsp;·&nbsp; Photo Collages</div>
+        <div class="card-btns">
+          <a href="travel_template/editor.html" class="btn-card-rust">Customise →</a>
+          <a href="travel_template/preview.html" class="btn-card-ghost">Preview</a>
         </div>
       </div>
     </div>
