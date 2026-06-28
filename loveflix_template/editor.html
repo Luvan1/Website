@@ -780,18 +780,80 @@
     /* ============================================================
        RESPONSIVE
     ============================================================ */
+    /* Add-photo card in row */
+    .photo-card-add {
+      background: rgba(255,255,255,0.04);
+      border: 2px dashed rgba(255,255,255,0.18);
+      cursor: pointer !important;
+      display: flex !important;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.2s, background 0.2s !important;
+    }
+    .photo-card-add:hover {
+      background: rgba(255,255,255,0.1) !important;
+      border-color: rgba(255,255,255,0.38) !important;
+    }
+    .add-card-inner {
+      text-align: center;
+      color: rgba(255,255,255,0.4);
+      pointer-events: none;
+    }
+    .add-card-plus  { font-size: 28px; line-height: 1; margin-bottom: 5px; }
+    .add-card-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; }
+
+    /* Hero change-image button — corner of each slide */
+    .hero-change-btn {
+      position: absolute;
+      top: 14px; right: 14px;
+      z-index: 10;
+      padding: 7px 13px;
+      background: rgba(0,0,0,0.65);
+      border: 1px solid rgba(255,255,255,0.28);
+      border-radius: 4px;
+      color: rgba(255,255,255,0.85);
+      font-size: 12px;
+      font-family: var(--body);
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+      transition: background 0.2s;
+    }
+    .hero-change-btn:hover { background: rgba(0,0,0,0.88); color: #fff; }
+
+    /* Detail panel — editable fields hint */
+    #detailRight [contenteditable="true"] {
+      border-bottom: 1px dashed rgba(255,255,255,0.18);
+      padding-bottom: 2px;
+      cursor: text;
+    }
+    #detailRight [contenteditable="true"]:focus {
+      border-bottom-color: var(--accent);
+      outline: none;
+    }
+    .detail-edit-hint {
+      font-size: 10px;
+      color: var(--text3);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 4px 0 2px;
+    }
+
     @media (max-width: 768px) {
       #heroSection { height: 65vh; }
 
       .hero-content {
-        max-width: 88%;
+        max-width: 92%;
         left: 4%;
-        bottom: 16%;
+        bottom: 12%;
       }
+
+      .hero-actions { gap: 8px; }
+      .btn-play, .btn-info { padding: 8px 16px; font-size: 13px; }
 
       .hero-arrow { display: none; }
 
-      .photo-card { width: 160px; height: 106px; }
+      .photo-card { width: 155px; height: 102px; }
 
       #detailContent {
         flex-direction: column;
@@ -800,18 +862,28 @@
       }
 
       #detailLeft {
-        min-height: 200px;
+        min-height: 210px;
         flex: none;
-        height: 200px;
+        height: 210px;
       }
 
-      #detailRight { padding: 22px 20px; }
+      #detailRight { padding: 22px 20px; gap: 10px; }
 
       .nav-logo { font-size: 20px; }
     }
 
+    @media (max-width: 640px) {
+      .btn-share { display: none; }
+      .nav-left { gap: 12px; }
+      .nav-right { gap: 6px; }
+    }
+
     @media (max-width: 480px) {
-      .nav-right .btn-toggle { display: none; }
+      #navbar { padding: 0 3%; }
+      .nav-logo { font-size: 17px; letter-spacing: 2px; }
+      .btn-publish { padding: 6px 12px; font-size: 12px; }
+      .btn-toggle  { padding: 6px 12px; font-size: 12px; }
+      .photo-card  { width: 138px; height: 92px; }
     }
   </style>
 </head>
@@ -829,6 +901,9 @@
       <button id="publishBtn" class="btn-publish">Publish</button>
     </div>
   </nav>
+
+  <!-- Single shared file input for hero images (outside contenteditable area) -->
+  <input type="file" id="heroFileInput" accept="image/*" style="display:none">
 
   <!-- Hero Section -->
   <section id="heroSection">
@@ -851,6 +926,7 @@
         <div id="detailPlaceholder"></div>
       </div>
       <div id="detailRight">
+        <div id="detailEditHint" class="detail-edit-hint">✏ Tap any field to edit</div>
         <div id="detailBadge" contenteditable="false"></div>
         <h2 id="detailTitle" contenteditable="false"></h2>
         <div id="detailRating" contenteditable="false"></div>
@@ -971,6 +1047,15 @@
     /* ============================================================
        HERO RENDER
     ============================================================ */
+    let pendingHeroIndex = -1;
+
+    function pickHeroImage(i) {
+      pendingHeroIndex = i;
+      const fi = document.getElementById('heroFileInput');
+      fi.value = '';
+      fi.click();
+    }
+
     function renderHero() {
       const track = document.getElementById('heroTrack');
       track.innerHTML = albumData.heroSlides.map((s, i) => {
@@ -980,6 +1065,7 @@
         return `
           <div class="hero-slide" style="${bg}" data-index="${i}">
             <div class="hero-overlay"></div>
+            <button class="hero-change-btn edit-only" onclick="pickHeroImage(${i})">&#128247; Change Image</button>
             <div class="hero-content">
               <div class="hero-badge-wrap">
                 <span class="hero-badge" contenteditable="true" data-si="${i}" data-f="badge">${s.badge}</span>
@@ -994,8 +1080,6 @@
               <div class="hero-actions">
                 <button class="btn-play" onclick="openHeroDetail(${i})">&#9654; Play</button>
                 <button class="btn-info" onclick="openHeroDetail(${i})">&#9432; More Info</button>
-                <input type="file" accept="image/*" id="heroFile${i}" style="display:none">
-                <button class="btn-change-img edit-only" onclick="document.getElementById('heroFile${i}').click()">&#128247; Change Image</button>
               </div>
             </div>
           </div>`;
@@ -1009,26 +1093,6 @@
           saveToStorage();
         });
         el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } });
-      });
-
-      /* Hero image uploads */
-      albumData.heroSlides.forEach((_, i) => {
-        const inp = document.getElementById(`heroFile${i}`);
-        inp && inp.addEventListener('change', e => {
-          const f = e.target.files[0];
-          if (!f) return;
-          const rd = new FileReader();
-          rd.onload = ev => {
-            albumData.heroSlides[i].image = ev.target.result;
-            const slide = track.querySelectorAll('.hero-slide')[i];
-            slide.style.backgroundImage = `url('${ev.target.result}')`;
-            slide.style.backgroundSize = 'cover';
-            slide.style.backgroundPosition = 'center';
-            slide.style.background = '';
-            saveToStorage();
-          };
-          rd.readAsDataURL(f);
-        });
       });
 
       updateHeroPos();
@@ -1072,10 +1136,7 @@
         <div class="section-block" id="sec${si}">
           <div class="section-header">
             <h2 class="section-title" contenteditable="true" data-si="${si}">${sec.title}</h2>
-            <div>
-              <input type="file" accept="image/*" multiple id="photoFile${si}" style="display:none">
-              <button class="btn-add-photos edit-only" onclick="document.getElementById('photoFile${si}').click()">+ Add Photos</button>
-            </div>
+            <input type="file" accept="image/*" multiple id="photoFile${si}" style="display:none">
           </div>
           <div class="carousel-wrapper">
             <button class="section-arrow section-arrow-left" onclick="scrollSection(${si},-1)">&#8249;</button>
@@ -1095,14 +1156,23 @@
         /* Photo upload */
         const inp = document.getElementById(`photoFile${si}`);
         if (inp) inp.addEventListener('change', e => uploadPhotos(si, e.target.files));
-        /* Wave effect */
+        /* Wave + touch scroll */
         const row = document.getElementById(`row${si}`);
-        if (row) setupWave(row);
+        if (row) { setupWave(row); setupTouchScroll(row, si); }
       });
     }
 
     function renderCards(photos, si) {
-      if (!photos.length) return `<div class="empty-row">Click <strong>+ Add Photos</strong> to add your first memories to this section.</div>`;
+      const addCard = `
+        <div class="photo-card photo-card-add edit-only" onclick="document.getElementById('photoFile${si}').click()">
+          <div class="add-card-inner">
+            <div class="add-card-plus">+</div>
+            <div class="add-card-label">Add Photo</div>
+          </div>
+        </div>`;
+
+      if (!photos.length) return addCard;
+
       return photos.map((p, pi) => {
         const bg = p.image
           ? `background-image:url('${p.image}');background-size:cover;background-position:center`
@@ -1115,7 +1185,7 @@
               <div class="card-meta">${p.rating} &nbsp;&middot;&nbsp; ${p.badge}</div>
             </div>
           </div>`;
-      }).join('');
+      }).join('') + addCard;
     }
 
     function refreshRow(si) {
@@ -1150,6 +1220,26 @@
           c.style.zIndex = '1';
         });
       });
+    }
+
+    /* ============================================================
+       TOUCH SCROLL FOR PHOTO ROWS
+    ============================================================ */
+    function setupTouchScroll(row, si) {
+      let startX = 0, startOff = 0;
+      row.addEventListener('touchstart', e => {
+        startX = e.touches[0].clientX;
+        startOff = sectionOffsets[si] || 0;
+      }, { passive: true });
+      row.addEventListener('touchmove', e => {
+        const dx = startX - e.touches[0].clientX;
+        const CARD = window.innerWidth <= 480 ? 144 : window.innerWidth <= 768 ? 161 : 206;
+        const total = albumData.sections[si].photos.length * CARD;
+        const visible = row.parentElement ? row.parentElement.clientWidth : window.innerWidth;
+        const max = Math.max(0, total - visible + 80);
+        sectionOffsets[si] = Math.min(max, Math.max(0, startOff + dx));
+        row.style.transform = `translateX(-${sectionOffsets[si]}px)`;
+      }, { passive: true });
     }
 
     /* ============================================================
@@ -1196,7 +1286,6 @@
        CARD / HERO CLICK
     ============================================================ */
     function cardClick(si, pi) {
-      if (editMode) return;
       const p = albumData.sections[si].photos[pi];
       selSection = si; selPhoto = pi; selIsHero = false;
       openDetail({
@@ -1247,12 +1336,18 @@
       cat.textContent   = d.category     || '';
       desc.textContent  = d.description  || '';
 
-      /* Sync edits back to data */
+      /* Set editable based on current mode */
+      const editable = editMode ? 'true' : 'false';
       [badge, title, rat, cat, desc].forEach(el => {
+        el.contentEditable = editable;
         el.removeEventListener('input', el._saveHandler || (() => {}));
         el._saveHandler = () => saveDetailField(el.id, el.textContent);
         el.addEventListener('input', el._saveHandler);
       });
+
+      /* Show/hide edit hint */
+      const hint = document.getElementById('detailEditHint');
+      if (hint) hint.style.display = editMode ? '' : 'none';
 
       document.getElementById('detailPanel').classList.add('open');
       document.body.style.overflow = 'hidden';
@@ -1364,6 +1459,26 @@
         if (Math.abs(dx) > 48) navigateHero(dx > 0 ? 1 : -1);
         startAutoplay();
       }, { passive: true });
+
+      /* Hero image file input (single shared input) */
+      document.getElementById('heroFileInput').addEventListener('change', e => {
+        const f = e.target.files[0];
+        if (!f || pendingHeroIndex < 0) return;
+        const rd = new FileReader();
+        rd.onload = ev => {
+          albumData.heroSlides[pendingHeroIndex].image = ev.target.result;
+          const slides = document.querySelectorAll('.hero-slide');
+          const slide = slides[pendingHeroIndex];
+          if (slide) {
+            /* Use setAttribute to fully replace inline style and avoid ordering bugs */
+            slide.setAttribute('style',
+              `background-image:url('${ev.target.result}');background-size:cover;background-position:center`);
+          }
+          pendingHeroIndex = -1;
+          saveToStorage();
+        };
+        rd.readAsDataURL(f);
+      });
 
       /* Mode toggle */
       document.getElementById('toggleModeBtn').addEventListener('click', () => setMode(!editMode));
