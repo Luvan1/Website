@@ -1,0 +1,774 @@
+/* ============================================================================
+ * world.js — Builds the 3D world of Duhok: terrain (the valley between the
+ * Bêxêr and Zawa ridges), roads at real scale, the dam lake, buildings and
+ * the city's landmarks.  All coordinates are metres (1 unit = 1 m).
+ * ==========================================================================*/
+'use strict';
+
+const WORLD = (() => {
+
+  /* ------------------------------ utilities ----------------------------- */
+
+  function makeSegmentHash(cell) {
+    const map = new Map();
+    const key = (cx, cz) => cx + ',' + cz;
+    function addSeg(ax, az, bx, bz, data) {
+      const minX = Math.min(ax, bx), maxX = Math.max(ax, bx);
+      const minZ = Math.min(az, bz), maxZ = Math.max(az, bz);
+      for (let cx = Math.floor(minX / cell); cx <= Math.floor(maxX / cell); cx++) {
+        for (let cz = Math.floor(minZ / cell); cz <= Math.floor(maxZ / cell); cz++) {
+          const k = key(cx, cz);
+          let arr = map.get(k);
+          if (!arr) { arr = []; map.set(k, arr); }
+          arr.push({ ax, az, bx, bz, data });
+        }
+      }
+    }
+    function segDist2(px, pz, s) {
+      const dx = s.bx - s.ax, dz = s.bz - s.az;
+      const len2 = dx * dx + dz * dz || 1e-9;
+      let t = ((px - s.ax) * dx + (pz - s.az) * dz) / len2;
+      t = t < 0 ? 0 : (t > 1 ? 1 : t);
+      const qx = s.ax + t * dx - px, qz = s.az + t * dz - pz;
+      return qx * qx + qz * qz;
+    }
+    function nearest(px, pz, maxR) {
+      const rC = Math.ceil(maxR / cell);
+      const cx0 = Math.floor(px / cell), cz0 = Math.floor(pz / cell);
+      let best = null, bestD2 = maxR * maxR;
+      for (let r = 0; r <= rC; r++) {
+        for (let cx = cx0 - r; cx <= cx0 + r; cx++) {
+          for (let cz = cz0 - r; cz <= cz0 + r; cz++) {
+            if (Math.max(Math.abs(cx - cx0), Math.abs(cz - cz0)) !== r) continue;
+            const arr = map.get(key(cx, cz));
+            if (!arr) continue;
+            for (const s of arr) {
+              const d2 = segDist2(px, pz, s);
+              if (d2 < bestD2) { bestD2 = d2; best = s; }
+            }
+          }
+        }
+        // if we already found something closer than the next ring can offer, stop
+        if (best && Math.sqrt(bestD2) < (r) * cell - cell * 0.5) break;
+      }
+      return best ? { d: Math.sqrt(bestD2), seg: best } : null;
+    }
+    return { addSeg, nearest, _map: map };
+  }
+
+  function makeBoxHash(cell) {
+    const map = new Map();
+    const boxes = [];
+    function addBox(x0, z0, x1, z1) {
+      const b = { x0, z0, x1, z1 };
+      boxes.push(b);
+      for (let cx = Math.floor(x0 / cell); cx <= Math.floor(x1 / cell); cx++) {
+        for (let cz = Math.floor(z0 / cell); cz <= Math.floor(z1 / cell); cz++) {
+          const k = cx + ',' + cz;
+          let arr = map.get(k);
+          if (!arr) { arr = []; map.set(k, arr); }
+          arr.push(b);
+        }
+      }
+    }
+    function query(px, pz, r) {
+      const out = [];
+      for (let cx = Math.floor((px - r) / cell); cx <= Math.floor((px + r) / cell); cx++) {
+        for (let cz = Math.floor((pz - r) / cell); cz <= Math.floor((pz + r) / cell); cz++) {
+          const arr = map.get(cx + ',' + cz);
+          if (arr) for (const b of arr) if (out.indexOf(b) === -1) out.push(b);
+        }
+      }
+      return out;
+    }
+    return { addBox, query, boxes };
+  }
+
+  const _rng = (seed => () => {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  })(20260704);
+
+  /* ------------------------------- terrain ------------------------------ */
+  // Raw geological height: valley floor at 0, White Mountain (Bêxêr) ridge to
+  // the north, Zawa ridge to the south with the Gali Duhok gorge cut through,
+  // and the raised bowl that holds the dam lake.
+  function rawHeight(x, z) {
+    const smooth = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+    let h = 0;
+    // Bêxêr ridge (north — pale rock)
+    const n = smooth((-z - 3200) / 2100);
+    h += 360 * n * (0.82 + 0.18 * Math.sin(x * 0.00071 + 1.4) + 0.07 * Math.sin(x * 0.0023));
+    // Zawa ridge (south) with the gorge cut at the Mosul road
+    let s = smooth((z - 2300) / 2100);
+    const gorge = Math.exp(-((x + 620) * (x + 620)) / (2 * 260 * 260));
+    s *= (1 - 0.93 * gorge);
+    h += 320 * s * (0.85 + 0.15 * Math.sin(x * 0.00082 + 0.4));
+    // Dam lake bowl (raised ground holding the reservoir)
+    const dx = (x - 1250) / 850, dz = (z + 2560) / 640;
+    h += 26 * Math.exp(-(dx * dx + dz * dz) / 2);
+    // gentle rolling of the valley floor far from centre
+    h += 2.5 * Math.sin(x * 0.0012 + 2.0) * Math.sin(z * 0.0014);
+    return h;
+  }
+
+  /* ------------------------------ materials ----------------------------- */
+  const MAT = {};
+  function initMaterials() {
+    MAT.vcLambert = new THREE.MeshLambertMaterial({ vertexColors: true });
+    MAT.vcBasic = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    MAT.water = new THREE.MeshLambertMaterial({ color: 0x2e6f9e });
+    MAT.green = new THREE.MeshLambertMaterial({ color: 0x5f8a45 });
+  }
+
+  /* --------------------------- geometry helpers ------------------------- */
+  // sRGB → linear working space (r185 expects vertex colours in linear space)
+  const lin = c => [Math.pow(c[0], 2.2), Math.pow(c[1], 2.2), Math.pow(c[2], 2.2)];
+
+  // Accumulator for merged, non-indexed, vertex-coloured triangles.
+  function makeAcc() {
+    return { pos: [], col: [], nor: null };
+  }
+  function accToMesh(acc, material) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(acc.pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(acc.col, 3));
+    if (material === MAT.vcLambert) g.computeVertexNormals();
+    const m = new THREE.Mesh(g, material);
+    m.matrixAutoUpdate = false;
+    return m;
+  }
+  function pushTri(acc, ax, ay, az, bx, by, bz, cx, cy, cz, r, g, b) {
+    acc.pos.push(ax, ay, az, bx, by, bz, cx, cy, cz);
+    acc.col.push(r, g, b, r, g, b, r, g, b);
+  }
+  function pushQuad(acc, a, b, c, d, col) {
+    pushTri(acc, a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], col[0], col[1], col[2]);
+    pushTri(acc, a[0], a[1], a[2], c[0], c[1], c[2], d[0], d[1], d[2], col[0], col[1], col[2]);
+  }
+
+  // Ribbon along a flat [x,z,...] polyline at height y with width w.
+  function pushRibbon(acc, pts, w, y, col) {
+    const n = pts.length / 2;
+    if (n < 2) return;
+    const hw = w / 2;
+    let prevL = null, prevR = null;
+    for (let i = 0; i < n; i++) {
+      const x = pts[i * 2], z = pts[i * 2 + 1];
+      const x0 = i > 0 ? pts[(i - 1) * 2] : x, z0 = i > 0 ? pts[(i - 1) * 2 + 1] : z;
+      const x1 = i < n - 1 ? pts[(i + 1) * 2] : x, z1 = i < n - 1 ? pts[(i + 1) * 2 + 1] : z;
+      let dx = x1 - x0, dz = z1 - z0;
+      const len = Math.hypot(dx, dz) || 1;
+      dx /= len; dz /= len;
+      // perpendicular (left of travel direction)
+      const px = -dz, pz = dx;
+      const L = [x + px * hw, y, z + pz * hw];
+      const R = [x - px * hw, y, z - pz * hw];
+      if (prevL) pushQuad(acc, prevL, prevR, R, L, col);
+      prevL = L; prevR = R;
+    }
+  }
+
+  // Dashed ribbon (for lane markings)
+  function pushDashes(acc, pts, w, y, col, dashLen, gapLen) {
+    const n = pts.length / 2;
+    let carry = 0, drawing = true;
+    for (let i = 0; i < n - 1; i++) {
+      let ax = pts[i * 2], az = pts[i * 2 + 1];
+      const bx = pts[(i + 1) * 2], bz = pts[(i + 1) * 2 + 1];
+      let segLen = Math.hypot(bx - ax, bz - az);
+      if (segLen < 1e-6) continue;
+      const ux = (bx - ax) / segLen, uz = (bz - az) / segLen;
+      while (segLen > 0) {
+        const want = (drawing ? dashLen : gapLen) - carry;
+        const step = Math.min(want, segLen);
+        const nx = ax + ux * step, nz = az + uz * step;
+        if (drawing) {
+          const px = -uz * w / 2, pz = ux * w / 2;
+          pushQuad(acc,
+            [ax + px, y, az + pz], [ax - px, y, az - pz],
+            [nx - px, y, nz - pz], [nx + px, y, nz + pz], col);
+        }
+        carry += step; segLen -= step;
+        ax = nx; az = nz;
+        if (carry >= (drawing ? dashLen : gapLen) - 1e-6) { carry = 0; drawing = !drawing; }
+      }
+    }
+  }
+
+  // Offset a flat polyline sideways (for dual-carriageway median lines etc.)
+  function offsetLine(pts, off) {
+    const n = pts.length / 2, out = new Array(pts.length);
+    for (let i = 0; i < n; i++) {
+      const x0 = i > 0 ? pts[(i - 1) * 2] : pts[i * 2];
+      const z0 = i > 0 ? pts[(i - 1) * 2 + 1] : pts[i * 2 + 1];
+      const x1 = i < n - 1 ? pts[(i + 1) * 2] : pts[i * 2];
+      const z1 = i < n - 1 ? pts[(i + 1) * 2 + 1] : pts[i * 2 + 1];
+      let dx = x1 - x0, dz = z1 - z0;
+      const len = Math.hypot(dx, dz) || 1; dx /= len; dz /= len;
+      out[i * 2] = pts[i * 2] - dz * off;
+      out[i * 2 + 1] = pts[i * 2 + 1] + dx * off;
+    }
+    return out;
+  }
+
+  function pushPolygon(acc, poly, y, col) {
+    const contour = [];
+    for (let i = 0; i < poly.length; i += 2) contour.push(new THREE.Vector2(poly[i], poly[i + 1]));
+    if (contour.length < 3) return;
+    let tris;
+    try { tris = THREE.ShapeUtils.triangulateShape(contour, []); }
+    catch (e) { return; }
+    for (const t of tris) {
+      pushTri(acc,
+        contour[t[0]].x, y, contour[t[0]].y,
+        contour[t[1]].x, y, contour[t[1]].y,
+        contour[t[2]].x, y, contour[t[2]].y,
+        col[0], col[1], col[2]);
+    }
+  }
+
+  function polyCentroid(poly) {
+    let x = 0, z = 0; const n = poly.length / 2;
+    for (let i = 0; i < n; i++) { x += poly[i * 2]; z += poly[i * 2 + 1]; }
+    return { x: x / n, z: z / n };
+  }
+  function polyBounds(poly) {
+    let x0 = 1e9, z0 = 1e9, x1 = -1e9, z1 = -1e9;
+    for (let i = 0; i < poly.length; i += 2) {
+      x0 = Math.min(x0, poly[i]); x1 = Math.max(x1, poly[i]);
+      z0 = Math.min(z0, poly[i + 1]); z1 = Math.max(z1, poly[i + 1]);
+    }
+    return { x0, z0, x1, z1 };
+  }
+  function pointInPoly(px, pz, poly) {
+    let inside = false; const n = poly.length / 2;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const xi = poly[i * 2], zi = poly[i * 2 + 1], xj = poly[j * 2], zj = poly[j * 2 + 1];
+      if ((zi > pz) !== (zj > pz) && px < (xj - xi) * (pz - zi) / (zj - zi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+
+  /* ------------------------------ build steps --------------------------- */
+
+  function buildRoadIndex(roads) {
+    const hash = makeSegmentHash(60);
+    for (const r of roads) {
+      const p = r.pts;
+      for (let i = 0; i < p.length / 2 - 1; i++) {
+        hash.addSeg(p[i * 2], p[i * 2 + 1], p[i * 2 + 2], p[i * 2 + 3], r);
+      }
+    }
+    return hash;
+  }
+
+  function makeHeightField(roadIndex) {
+    // Effective height: geological height flattened near roads so the whole
+    // drivable network stays level (roads are rendered at y≈0).
+    return function heightAt(x, z) {
+      const raw = rawHeight(x, z);
+      if (raw < 0.4) return raw;
+      const near = roadIndex.nearest(x, z, 150);
+      if (!near) return raw;
+      const d = near.d;
+      const t = (d - 28) / 110;
+      const f = t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+      return raw * f;
+    };
+  }
+
+  function buildTerrain(scene, heightAt, waterInfos) {
+    const W = 20000, H = 15000, SX = 170, SZ = 128;
+    const geo = new THREE.PlaneGeometry(W, H, SX, SZ);
+    geo.rotateX(-Math.PI / 2);
+    const pos = geo.attributes.position;
+    const colors = new Float32Array(pos.count * 3);
+    const c = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i) - 600;   // shift: more land south
+      let h = heightAt(x, z);
+      // carve the lake beds below their water surface
+      for (const wi of waterInfos) {
+        if (x < wi.bb.x0 - 60 || x > wi.bb.x1 + 60 || z < wi.bb.z0 - 60 || z > wi.bb.z1 + 60) continue;
+        if (pointInPoly(x, z, wi.poly)) h = Math.min(h, wi.y - 4);
+      }
+      pos.setX(i, x); pos.setZ(i, z);
+      pos.setY(i, h - 0.35);        // tucked slightly under the roads
+      // colour by elevation: dry valley floor → olive foothills → pale rock
+      if (h < 6) c.setHex(0x9b8f6a).offsetHSL(0, 0, _rng() * 0.03 - 0.015);
+      else if (h < 60) c.setHex(0x8a8256);
+      else if (h < 180) c.setHex(0x97846a);
+      else c.setHex(0xcfc5b3);
+      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, MAT.vcLambert);
+    mesh.matrixAutoUpdate = false;
+    scene.add(mesh);
+  }
+
+  function buildRoads(scene, roads) {
+    const asphalt = makeAcc(), lines = makeAcc();
+    const clsColor = {
+      motorway: lin([0.165, 0.17, 0.19]), trunk: lin([0.165, 0.17, 0.19]),
+      primary: lin([0.185, 0.19, 0.21]), secondary: lin([0.20, 0.21, 0.23]),
+      tertiary: lin([0.215, 0.225, 0.245]), default: lin([0.235, 0.245, 0.26]),
+    };
+    const white = lin([0.88, 0.88, 0.9]), yellow = lin([0.85, 0.7, 0.2]);
+    let i = 0;
+    for (const r of roads) {
+      const cls = OSM.ROAD_CLASSES[r.cls] || OSM.ROAD_CLASSES.residential;
+      const col = clsColor[r.cls] || clsColor.default;
+      const y = 0.05 + (i % 8) * 0.013;
+      pushRibbon(asphalt, r.pts, cls.w, y, col);
+      if (cls.rank <= 2) {
+        const my = 0.155 + (i % 8) * 0.002;
+        if (cls.dual) {
+          pushRibbon(lines, offsetLine(r.pts, 0.4), 0.18, my, yellow);
+          pushRibbon(lines, offsetLine(r.pts, -0.4), 0.18, my, yellow);
+          pushDashes(lines, offsetLine(r.pts, cls.w * 0.25), 0.15, my, white, 3.5, 8);
+          pushDashes(lines, offsetLine(r.pts, -cls.w * 0.25), 0.15, my, white, 3.5, 8);
+        } else {
+          pushDashes(lines, r.pts, 0.16, my, white, 3.5, 8);
+        }
+        pushRibbon(lines, offsetLine(r.pts, cls.w / 2 - 0.35), 0.15, my, white);
+        pushRibbon(lines, offsetLine(r.pts, -(cls.w / 2 - 0.35)), 0.15, my, white);
+      }
+      i++;
+    }
+    scene.add(accToMesh(asphalt, MAT.vcBasic));
+    scene.add(accToMesh(lines, MAT.vcBasic));
+  }
+
+  function waterSurfaces(city, heightAt) {
+    const infos = [];
+    for (const w of city.waters || []) {
+      const c = polyCentroid(w);
+      infos.push({ poly: w, bb: polyBounds(w), y: Math.max(1.2, heightAt(c.x, c.z) + 1.2) });
+    }
+    return infos;
+  }
+
+  function buildWaterAndGreens(scene, city, waterInfos) {
+    const acc = makeAcc(), gAcc = makeAcc();
+    for (const wi of waterInfos) {
+      pushPolygon(acc, wi.poly, wi.y, lin([0.16, 0.42, 0.62]));
+    }
+    for (const rv of city.rivers || []) {
+      pushRibbon(acc, rv, 8, 0.03, lin([0.2, 0.45, 0.62]));
+    }
+    for (const g of city.greens || []) {
+      pushPolygon(gAcc, g, 0.028, lin([0.32, 0.45, 0.22]));
+    }
+    scene.add(accToMesh(acc, MAT.vcBasic));
+    scene.add(accToMesh(gAcc, MAT.vcBasic));
+  }
+
+  const BUILDING_PALETTE = [
+    [0.82, 0.76, 0.65], [0.86, 0.82, 0.72], [0.78, 0.72, 0.6],
+    [0.88, 0.85, 0.78], [0.73, 0.68, 0.58], [0.84, 0.78, 0.62],
+  ].map(lin);
+
+  function buildRealBuildings(scene, buildings, colHash) {
+    // sun-baked shading baked into vertex colours (basic material, no lights)
+    const sunX = 0.55, sunZ = -0.35;
+    let acc = makeAcc(), inChunk = 0;
+    const flush = () => {
+      if (acc.pos.length) scene.add(accToMesh(acc, MAT.vcBasic));
+      acc = makeAcc(); inChunk = 0;
+    };
+    for (const b of buildings) {
+      const poly = b.pts;
+      const n = poly.length / 2;
+      if (n < 3) continue;
+      const base = BUILDING_PALETTE[(Math.floor(poly[0] * 13.7) & 1048575) % BUILDING_PALETTE.length];
+      const h = b.h;
+      // walls
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        const ax = poly[i * 2], az = poly[i * 2 + 1];
+        const bx = poly[j * 2], bz = poly[j * 2 + 1];
+        let nx = az - bz, nz = bx - ax;
+        const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;
+        const lum = 0.62 + 0.34 * Math.max(0, nx * sunX + nz * sunZ);
+        const col = [base[0] * lum, base[1] * lum, base[2] * lum];
+        pushQuad(acc, [ax, 0, az], [bx, 0, bz], [bx, h, bz], [ax, h, az], col);
+      }
+      // roof
+      pushPolygon(acc, poly, h, [base[0] * 0.55, base[1] * 0.55, base[2] * 0.55]);
+      // collision (AABB is a fair fit for typical houses)
+      const bb = polyBounds(poly);
+      if (bb.x1 - bb.x0 < 120 && bb.z1 - bb.z0 < 120) colHash.addBox(bb.x0, bb.z0, bb.x1, bb.z1);
+      if (++inChunk >= 700) flush();
+    }
+    flush();
+  }
+
+  function buildProceduralBuildings(scene, roads, roadIndex, colHash, landGreens) {
+    const geo = new THREE.BoxGeometry(1, 1, 1);
+    geo.translate(0, 0.5, 0);
+    const count = 6500;
+    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff }), count);
+    const m4 = new THREE.Matrix4(), col = new THREE.Color();
+    let idx = 0;
+    const centre = OSM.project(36.8585, 42.9930);      // bazaar = downtown
+    for (const r of roads) {
+      if (idx >= count) break;
+      const cls = OSM.ROAD_CLASSES[r.cls] || OSM.ROAD_CLASSES.residential;
+      if (cls.rank < 2) continue;                       // no houses on highways
+      const pts = r.pts;
+      for (let i = 0; i < pts.length / 2 - 1 && idx < count; i++) {
+        const ax = pts[i * 2], az = pts[i * 2 + 1];
+        const bx = pts[i * 2 + 2], bz = pts[i * 2 + 3];
+        const segLen = Math.hypot(bx - ax, bz - az);
+        const ux = (bx - ax) / (segLen || 1), uz = (bz - az) / (segLen || 1);
+        for (let d = 10; d < segLen - 10; d += 15 + _rng() * 12) {
+          for (const side of [-1, 1]) {
+            if (_rng() < 0.25 || idx >= count) continue;
+            const off = cls.w / 2 + 5 + _rng() * 5;
+            const cx = ax + ux * d - uz * off * side;
+            const cz = az + uz * d + ux * off * side;
+            // keep clear of other roads and parks
+            const near = roadIndex.nearest(cx, cz, 30);
+            if (near && near.d < cls.w / 2 + 3.5) continue;
+            let inPark = false;
+            for (const g of landGreens) { if (pointInPoly(cx, cz, g)) { inPark = true; break; } }
+            if (inPark) continue;
+            const distC = Math.hypot(cx - centre.x, cz - centre.z);
+            const w = 7 + _rng() * 6, dep = 7 + _rng() * 6;
+            let h = 3.6 + _rng() * 3.4;
+            if (distC < 900) h = 6 + _rng() * 9;         // taller downtown
+            m4.makeRotationY(-Math.atan2(uz, ux));
+            m4.setPosition(cx, 0, cz);
+            m4.elements[0] *= w; m4.elements[2] *= w;
+            m4.elements[8] *= dep; m4.elements[10] *= dep;
+            m4.elements[5] = h;
+            mesh.setMatrixAt(idx, m4);
+            const p = BUILDING_PALETTE[idx % BUILDING_PALETTE.length];
+            col.setRGB(p[0], p[1], p[2]);
+            mesh.setColorAt(idx, col);
+            colHash.addBox(cx - w / 2, cz - dep / 2, cx + w / 2, cz + dep / 2);
+            idx++;
+          }
+        }
+      }
+    }
+    mesh.count = idx;
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    scene.add(mesh);
+  }
+
+  /* ------------------------------ landmarks ----------------------------- */
+
+  function makeLabelSprite(text, sub) {
+    const cv = document.createElement('canvas');
+    cv.width = 512; cv.height = 144;
+    const ctx = cv.getContext('2d');
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(10,12,18,0.85)';
+    ctx.font = '700 52px system-ui, sans-serif';
+    ctx.strokeText(text, 256, 62); ctx.fillStyle = '#ffffff'; ctx.fillText(text, 256, 62);
+    if (sub) {
+      ctx.font = '500 30px system-ui, sans-serif';
+      ctx.lineWidth = 6;
+      ctx.strokeText(sub, 256, 108); ctx.fillStyle = '#ffd75e'; ctx.fillText(sub, 256, 108);
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = 4;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+    sp.scale.set(72, 20, 1);
+    sp.renderOrder = 50;
+    return sp;
+  }
+
+  function lambert(color) { return new THREE.MeshLambertMaterial({ color }); }
+
+  function box(g, w, h, d, color, x, y, z, ry) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lambert(color));
+    m.position.set(x, y, z);
+    if (ry) m.rotation.y = ry;
+    g.add(m);
+    return m;
+  }
+  function cyl(g, rT, rB, h, color, x, y, z, segs) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rT, rB, h, segs || 14), lambert(color));
+    m.position.set(x, y, z);
+    g.add(m);
+    return m;
+  }
+
+  function buildLandmark(lm, colHash) {
+    const g = new THREE.Group();
+    const p = OSM.project(lm.lat, lm.lon);
+    g.position.set(p.x, 0, p.z);
+    const addCol = (w, d, x = 0, z = 0) =>
+      colHash.addBox(p.x + x - w / 2, p.z + z - d / 2, p.x + x + w / 2, p.z + z + d / 2);
+    let labelH = 40;
+
+    switch (lm.kind) {
+      case 'dam': {
+        // 600 m long, 60 m high embankment dam across the valley mouth:
+        // a box with the top edge pinched into a trapezoidal ridge
+        const ridgeGeo = new THREE.BoxGeometry(620, 58, 90);
+        {
+          const pos = ridgeGeo.attributes.position;
+          for (let i = 0; i < pos.count; i++) {
+            if (pos.getY(i) > 0) pos.setZ(i, pos.getZ(i) * 0.12);
+          }
+          ridgeGeo.computeVertexNormals();
+          ridgeGeo.translate(0, 29, 0);
+        }
+        const wall = new THREE.Mesh(ridgeGeo, lambert(0x9a938a));
+        wall.position.set(0, 0, -140);
+        g.add(wall);
+        box(g, 624, 2.2, 9, 0x777d85, 0, 58.5, -140);   // crest road
+        cyl(g, 6, 6, 66, 0xb8b2a6, -80, 33, -190, 12);         // intake tower
+        box(g, 40, 14, 30, 0x8a8478, 120, 7, -60);              // spillway house
+        addCol(640, 90, 0, -140);
+        labelH = 95;
+        break;
+      }
+      case 'stadium': {
+        const bowl = new THREE.Mesh(
+          new THREE.CylinderGeometry(118, 136, 20, 28, 1, true), lambert(0xd8d4c8));
+        bowl.material.side = THREE.DoubleSide;
+        bowl.scale.z = 0.8;
+        bowl.position.y = 10;
+        g.add(bowl);
+        const pitch = new THREE.Mesh(new THREE.CircleGeometry(95, 24), lambert(0x3f7a2e));
+        pitch.rotation.x = -Math.PI / 2; pitch.scale.y = 0.72;
+        pitch.position.y = 0.35;
+        g.add(pitch);
+        for (let i = 0; i < 4; i++) {
+          const a = Math.PI / 4 + i * Math.PI / 2;
+          cyl(g, 1.2, 1.6, 42, 0xcccccc, Math.cos(a) * 140, 21, Math.sin(a) * 112 * 0.9, 8);
+          box(g, 8, 5, 1.2, 0xf3f0dd, Math.cos(a) * 140, 44, Math.sin(a) * 112 * 0.9, -a);
+        }
+        // ring collision approximated with four boxes
+        addCol(270, 40, 0, -100); addCol(270, 40, 0, 100);
+        addCol(40, 200, -125, 0); addCol(40, 200, 125, 0);
+        labelH = 60;
+        break;
+      }
+      case 'university': {
+        const campus = [[-70, -20, 0], [10, 10, 0.3], [70, -15, -0.2]];
+        for (const [x, z, ry] of campus) {
+          box(g, 64, 15, 16, 0xe4ddcc, x, 7.5, z, ry);
+          box(g, 64, 2.5, 17, 0x5f83a8, x, 16.2, z, ry);
+          addCol(66, 20, x, z);
+        }
+        // gate
+        box(g, 3, 12, 3, 0xcbbfa5, -14, 6, 60);
+        box(g, 3, 12, 3, 0xcbbfa5, 14, 6, 60);
+        box(g, 34, 3, 4, 0x9a5b2c, 0, 12.5, 60);
+        cyl(g, 0.3, 0.3, 22, 0xdddddd, 0, 11, 40, 6);
+        labelH = 55;
+        break;
+      }
+      case 'park': {
+        // Azadi Park — ferris wheel + entrance
+        const wheel = new THREE.Group();          // oriented mount
+        const spin = new THREE.Group();           // the part that rotates
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(24, 0.9, 8, 28), lambert(0xd94f3d));
+        spin.add(ring);
+        for (let i = 0; i < 10; i++) {
+          const a = i / 10 * Math.PI * 2;
+          const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 47), lambert(0xe8e2d4));
+          spoke.rotation.z = a;
+          spin.add(spoke);
+          const cab = new THREE.Mesh(new THREE.BoxGeometry(3, 3.4, 3),
+            lambert([0xf2c14e, 0x4ea5d9, 0x7fb069, 0xd94f3d][i % 4]));
+          cab.position.set(Math.cos(a) * 24, Math.sin(a) * 24 - 1.5, 1.2);
+          spin.add(cab);
+        }
+        wheel.add(spin);
+        wheel.rotation.y = Math.PI / 2;
+        wheel.position.y = 27;
+        g.add(wheel);
+        g.userData.wheel = spin;
+        for (const s of [-1, 1]) {
+          const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.4, 30), lambert(0xb9b3a2));
+          leg.position.set(s * 3, 14, s * 8);
+          leg.rotation.x = s * 0.28;
+          g.add(leg);
+        }
+        addCol(14, 20);
+        box(g, 26, 8, 2.2, 0xc9553e, 0, 4, 90);
+        labelH = 62;
+        break;
+      }
+      case 'bazaar': {
+        // dense covered market + the Grand Mosque
+        for (let i = 0; i < 8; i++) {
+          const x = -55 + (i % 4) * 32, z = -14 + Math.floor(i / 4) * 30;
+          box(g, 26, 6.5, 22, 0xcfc3a8, x, 3.25, z);
+          box(g, 27, 1.6, 23, 0x9c6b3f, x, 7.2, z);
+          addCol(27, 23, x, z);
+        }
+        // mosque
+        const hall = box(g, 34, 10, 26, 0xefe8d8, 60, 5, 4);
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(10, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), lambert(0x3e7f5b));
+        dome.position.set(60, 10, 4); g.add(dome);
+        cyl(g, 1.6, 2.1, 34, 0xf4eee0, 42, 17, -8, 10);
+        const cap = new THREE.Mesh(new THREE.ConeGeometry(2.4, 5, 10), lambert(0x3e7f5b));
+        cap.position.set(42, 36.5, -8); g.add(cap);
+        addCol(36, 28, 60, 4);
+        labelH = 52;
+        break;
+      }
+      case 'mall': {
+        box(g, 130, 17, 62, 0xd7cfc2, 0, 8.5, 0);
+        box(g, 130, 3.2, 62, 0x8f8a80, 0, 18.6, 0);
+        box(g, 100, 10, 2, 0x77b7d9, 0, 6, 32);                 // glass front
+        box(g, 46, 7, 1.6, 0xb03a2e, 0, 23, 6);
+        addCol(132, 64);
+        labelH = 42;
+        break;
+      }
+      case 'dream': {
+        for (let rx = 0; rx < 5; rx++) {
+          for (let rz = 0; rz < 3; rz++) {
+            const x = -90 + rx * 45, z = -50 + rz * 48;
+            box(g, 14, 7.5, 12, 0xead9c0, x, 3.75, z);
+            const roof = new THREE.Mesh(new THREE.ConeGeometry(10.6, 4.4, 4), lambert(0xa8542f));
+            roof.rotation.y = Math.PI / 4;
+            roof.position.set(x, 9.6, z);
+            g.add(roof);
+            addCol(15, 13, x, z);
+          }
+        }
+        box(g, 4, 15, 4, 0xd8cbb4, -20, 7.5, 92);
+        box(g, 4, 15, 4, 0xd8cbb4, 20, 7.5, 92);
+        box(g, 48, 4, 5, 0xc27b46, 0, 17, 92);
+        labelH = 48;
+        break;
+      }
+      case 'gorge': {
+        // viewpoint sign only — the gorge itself is carved into the terrain
+        cyl(g, 0.25, 0.25, 5, 0x888888, 0, 2.5, 0, 6);
+        box(g, 10, 3, 0.5, 0x2d6a4f, 0, 5.5, 0);
+        labelH = 26;
+        break;
+      }
+    }
+
+    const label = makeLabelSprite(lm.name, lm.verified ? '' : '(approximate location)');
+    label.position.y = labelH;
+    g.add(label);
+    g.userData.landmark = lm;
+    g.userData.label = label;
+    return g;
+  }
+
+  function buildTrees(scene, city, heightAt, roadIndex) {
+    const trunkGeo = new THREE.CylinderGeometry(0.28, 0.4, 2.6, 6);
+    trunkGeo.translate(0, 1.3, 0);
+    const crownGeo = new THREE.SphereGeometry(2.2, 8, 6);
+    crownGeo.translate(0, 4.4, 0);
+    crownGeo.scale(1, 1.25, 1);
+    const trunks = new THREE.InstancedMesh(trunkGeo, lambert(0x6b4a2f), 2200);
+    const crowns = new THREE.InstancedMesh(crownGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), 2200);
+    const m4 = new THREE.Matrix4(), col = new THREE.Color();
+    let i = 0;
+    const put = (x, z, s) => {
+      if (i >= 2200) return;
+      const y = heightAt(x, z);
+      m4.makeScale(s, s * (0.85 + _rng() * 0.4), s);
+      m4.setPosition(x, y, z);
+      trunks.setMatrixAt(i, m4);
+      crowns.setMatrixAt(i, m4);
+      col.setHSL(0.26 + _rng() * 0.06, 0.45, 0.28 + _rng() * 0.1);
+      crowns.setColorAt(i, col);
+      i++;
+    };
+    // trees in parks/greens
+    for (const gPoly of city.greens || []) {
+      const bb = polyBounds(gPoly);
+      const area = (bb.x1 - bb.x0) * (bb.z1 - bb.z0);
+      const want = Math.min(140, Math.max(8, area / 6000));
+      for (let k = 0; k < want; k++) {
+        const x = bb.x0 + _rng() * (bb.x1 - bb.x0);
+        const z = bb.z0 + _rng() * (bb.z1 - bb.z0);
+        if (pointInPoly(x, z, gPoly)) put(x, z, 0.8 + _rng() * 0.9);
+      }
+    }
+    // scattered valley trees
+    for (let k = 0; k < 1400 && i < 2200; k++) {
+      const x = -8500 + _rng() * 17000, z = -4500 + _rng() * 9000;
+      const h = rawHeight(x, z);
+      if (h > 40) continue;
+      const near = roadIndex.nearest(x, z, 60);
+      if (near && near.d < 14) continue;
+      put(x, z, 0.7 + _rng() * 1.1);
+    }
+    trunks.count = crowns.count = i;
+    trunks.instanceMatrix.needsUpdate = crowns.instanceMatrix.needsUpdate = true;
+    if (crowns.instanceColor) crowns.instanceColor.needsUpdate = true;
+    scene.add(trunks); scene.add(crowns);
+  }
+
+  /* ------------------------------ main entry ---------------------------- */
+
+  function buildWorld(scene, city) {
+    initMaterials();
+    const roadIndex = buildRoadIndex(city.roads);
+    const heightAt = makeHeightField(roadIndex);
+    const colHash = makeBoxHash(80);
+
+    const waterInfos = waterSurfaces(city, heightAt);
+    buildTerrain(scene, heightAt, waterInfos);
+    buildRoads(scene, city.roads);
+    buildWaterAndGreens(scene, city, waterInfos);
+
+    if (city.buildings && city.buildings.length > 400) {
+      buildRealBuildings(scene, city.buildings, colHash);
+    } else {
+      buildProceduralBuildings(scene, city.roads, roadIndex, colHash, city.greens || []);
+    }
+
+    const landmarkGroups = [];
+    for (const lm of OSM.LANDMARKS) {
+      const grp = buildLandmark(lm, colHash);
+      landmarkGroups.push(grp);
+      scene.add(grp);
+    }
+
+    buildTrees(scene, city, heightAt, roadIndex);
+
+    return {
+      heightAt,
+      roadIndex,
+      collisions: colHash,
+      landmarks: landmarkGroups,
+      nearestRoad(x, z, maxR) {
+        const hit = roadIndex.nearest(x, z, maxR || 130);
+        if (!hit) return null;
+        const r = hit.seg.data;
+        const cls = OSM.ROAD_CLASSES[r.cls] || OSM.ROAD_CLASSES.residential;
+        return { d: hit.d, road: r, halfW: cls.w / 2, name: r.name };
+      },
+      update(dt, px, pz) {
+        for (const grp of landmarkGroups) {
+          if (grp.userData.wheel) grp.userData.wheel.rotation.z += dt * 0.15;
+          const label = grp.userData.label;
+          if (label && px !== undefined) {
+            // labels fade out when you arrive at the landmark, and in the far distance
+            const d = Math.hypot(grp.position.x - px, grp.position.z - pz);
+            const near = Math.min(1, Math.max(0, (d - 200) / 140));
+            const far = Math.min(1, Math.max(0, (3800 - d) / 800));
+            const op = near * far;
+            label.material.opacity = op;
+            label.visible = op > 0.02;
+          }
+        }
+      },
+    };
+  }
+
+  return { buildWorld, rawHeight };
+})();
