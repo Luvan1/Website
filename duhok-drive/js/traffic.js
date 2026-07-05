@@ -357,6 +357,7 @@ const TRAFFIC = (() => {
           check(o.x, o.z, o.speed, 2.3);
         }
         check(player.x, player.z, player.speed, 2.6);
+        if (player.parked) check(player.parked.x, player.parked.z, 0, 2.6);
         if (obsD < 1e9) {
           const safe = 7 + car.speed * 0.9;
           if (obsD < safe) target = Math.min(target, Math.max(0, obsSpeed - 0.5));

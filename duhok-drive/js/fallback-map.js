@@ -187,11 +187,22 @@ const FALLBACK_MAP = (() => {
             [36.8720, 43.0100]]),
     ];
 
+    // well-known Duhok neighbourhoods (approximate centres)
+    const places = [
+      ['Nizarke', 36.8640, 42.9470], ['Shindokha', 36.8712, 42.9650],
+      ['Masike', 36.8655, 42.9855], ['Baroshke', 36.8548, 42.9800],
+      ['Malta', 36.8485, 43.0000], ['KRO', 36.8660, 43.0070],
+      ['City Centre (Bazaar)', 36.8585, 42.9930],
+    ].map(([name, lat, lon]) => {
+      const p = OSM.project(lat, lon);
+      return { name, x: p.x, z: p.z, kind: 'suburb' };
+    });
+
     return {
       source: 'offline',
       attribution: 'Offline approximation — connect to the internet for the real OpenStreetMap layout',
       procedural: true,
-      roads, waters, greens, rivers,
+      roads, waters, greens, rivers, places,
       buildings: [],
     };
   }

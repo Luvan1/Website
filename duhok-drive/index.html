@@ -52,6 +52,9 @@
     color: #e8ecf4; background: rgba(10,14,22,.55); padding: 6px 16px; border-radius: 20px;
     max-width: 60vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   #roadname:empty { display: none; }
+  #hint { left: 50%; transform: translateX(-50%); bottom: 58px; font-size: 14px;
+    color: #ffe9b0; background: rgba(12,16,26,.6); padding: 5px 14px; border-radius: 16px; }
+  #hint:empty { display: none; }
   #minimap { left: 18px; bottom: 18px; position: fixed; z-index: 10; border-radius: 50%;
     box-shadow: 0 4px 18px rgba(0,0,0,.5); border: 2px solid rgba(255,255,255,.18); }
   #toast { top: 8vh; left: 50%; transform: translateX(-50%) translateY(-12px); opacity: 0;
@@ -79,6 +82,8 @@
   #t-right { left: 118px; bottom: 130px; }
   #t-brake { right: 110px; bottom: 130px; background: rgba(220,80,80,.25); }
   #t-gas { right: 22px; bottom: 130px; background: rgba(90,200,120,.25); }
+  #t-use { right: 22px; bottom: 224px; width: 60px; height: 60px; font-size: 15px;
+    background: rgba(255,215,94,.22); }
 </style>
 </head>
 <body>
@@ -92,6 +97,7 @@
     <div id="load-row"><span class="spin"></span><span id="load-status">Loading…</span><button id="skipbtn">skip — play with offline map</button></div>
     <div class="kv">
       <div><b>Drive</b> W A S D &nbsp;or&nbsp; arrow keys</div>
+      <div><b>Get out / in</b> F — explore landmarks on foot (Shift = run)</div>
       <div><b>Handbrake</b> Space &nbsp;&nbsp;<b>Horn</b> H</div>
       <div><b>Camera</b> C &nbsp;&nbsp;<b>City map</b> M &nbsp;&nbsp;<b>Reset to road</b> R</div>
     </div><br>
@@ -103,9 +109,10 @@
 
 <div id="speedo" class="hud"><div id="speed">0</div><small>KM/H</small></div>
 <div id="roadname" class="hud"></div>
+<div id="hint" class="hud"></div>
 <div id="toast" class="hud"></div>
 <div id="help" class="hud">
-  <b>C</b> camera &nbsp; <b>M</b> map &nbsp; <b>R</b> reset &nbsp; <b>H</b> horn
+  <b>F</b> out/in &nbsp; <b>C</b> camera &nbsp; <b>M</b> map &nbsp; <b>R</b> reset &nbsp; <b>H</b> horn
   <div style="font-size:10px;color:#8b98b0">map data © OpenStreetMap contributors</div>
 </div>
 <canvas id="minimap" width="230" height="230"></canvas>
@@ -120,6 +127,7 @@
   <div class="tbtn" id="t-right">▶</div>
   <div class="tbtn" id="t-brake">▼</div>
   <div class="tbtn" id="t-gas">▲</div>
+  <div class="tbtn" id="t-use">🚶/🚙</div>
 </div>
 
 <script>
@@ -178,7 +186,7 @@ const OSM = (() => {
   // Buildings are only fetched for the urban core (keeps download reasonable).
   const BBOX_BUILDINGS = { s: 36.8330, w: 42.9250, n: 36.8960, e: 43.0400 };
 
-  const CACHE_KEY = 'duhok-city-v1';
+  const CACHE_KEY = 'duhok-city-v2';
 
   function project(lat, lon) {
     return {
@@ -226,8 +234,9 @@ const OSM = (() => {
     unclassified:   { w: 6.5,kph: 40,  dual: false, rank: 4 },
     residential:    { w: 6.5,kph: 35,  dual: false, rank: 4 },
     living_street:  { w: 5.5,kph: 20,  dual: false, rank: 5 },
+    service:        { w: 4.5,kph: 25,  dual: false, rank: 6 },
   };
-  const HIGHWAY_REGEX = Object.keys(ROAD_CLASSES).join('|');
+  const HIGHWAY_REGEX = Object.keys(ROAD_CLASSES).filter(k => k !== 'service').join('|');
 
   const MIRRORS = [
     'https://overpass-api.de/api/interpreter',
@@ -238,7 +247,10 @@ const OSM = (() => {
 
   function bboxStr(b) { return `${b.s},${b.w},${b.n},${b.e}`; }
 
-  const Q_ROADS = `[out:json][timeout:120];way["highway"~"^(${HIGHWAY_REGEX})$"](${bboxStr(BBOX)});out geom qt;`;
+  // service roads (campus/mall/compound access lanes) are included, but not
+  // parking aisles and private driveways
+  const Q_ROADS = `[out:json][timeout:120];(way["highway"~"^(${HIGHWAY_REGEX})$"](${bboxStr(BBOX)});way["highway"="service"]["service"!~"parking_aisle|driveway"](${bboxStr(BBOX)}););out geom qt;`;
+  const Q_PLACES = `[out:json][timeout:60];node["place"~"^(suburb|neighbourhood|quarter|town|village|hamlet)$"](${bboxStr(BBOX)});out qt;`;
   const Q_AREAS = `[out:json][timeout:90];(way["natural"="water"](${bboxStr(BBOX)});relation["natural"="water"](${bboxStr(BBOX)});way["leisure"~"^(park|garden|pitch|stadium)$"](${bboxStr(BBOX)});way["landuse"~"^(forest|grass|recreation_ground|cemetery)$"](${bboxStr(BBOX)});way["waterway"="river"](${bboxStr(BBOX)}););out geom qt;`;
   const Q_BUILDINGS = `[out:json][timeout:120];way["building"](${bboxStr(BBOX_BUILDINGS)});out geom qt;`;
 
@@ -453,6 +465,19 @@ const OSM = (() => {
     return buildings;
   }
 
+  function parsePlaces(json) {
+    const places = [];
+    for (const el of json.elements) {
+      if (el.type !== 'node' || !el.tags || !el.tags.name) continue;
+      const p = project(el.lat, el.lon);
+      places.push({
+        name: el.tags['name:en'] || el.tags.name,
+        x: p.x, z: p.z, kind: el.tags.place,
+      });
+    }
+    return places;
+  }
+
   /* ------------------------------ Main load ------------------------------ */
   async function loadCity(opts) {
     const onStatus = opts.onStatus || (() => {});
@@ -488,10 +513,15 @@ const OSM = (() => {
         buildings = parseBuildings(await fetchOverpass(Q_BUILDINGS, 'Real buildings', onStatus, mirrors, 70000));
       } catch (e) { console.warn('buildings fetch failed', e); }
 
+      let places = [];
+      try {
+        places = parsePlaces(await fetchOverpass(Q_PLACES, 'District & area names', onStatus, mirrors, 25000));
+      } catch (e) { console.warn('places fetch failed', e); }
+
       const city = {
         source: 'osm',
         attribution: 'Map data © OpenStreetMap contributors (ODbL)',
-        roads, buildings,
+        roads, buildings, places,
         waters: areas.waters, greens: areas.greens, rivers: areas.rivers,
       };
       onStatus('Saving map to cache…');
@@ -699,11 +729,22 @@ const FALLBACK_MAP = (() => {
             [36.8720, 43.0100]]),
     ];
 
+    // well-known Duhok neighbourhoods (approximate centres)
+    const places = [
+      ['Nizarke', 36.8640, 42.9470], ['Shindokha', 36.8712, 42.9650],
+      ['Masike', 36.8655, 42.9855], ['Baroshke', 36.8548, 42.9800],
+      ['Malta', 36.8485, 43.0000], ['KRO', 36.8660, 43.0070],
+      ['City Centre (Bazaar)', 36.8585, 42.9930],
+    ].map(([name, lat, lon]) => {
+      const p = OSM.project(lat, lon);
+      return { name, x: p.x, z: p.z, kind: 'suburb' };
+    });
+
     return {
       source: 'offline',
       attribution: 'Offline approximation — connect to the internet for the real OpenStreetMap layout',
       procedural: true,
-      roads, waters, greens, rivers,
+      roads, waters, greens, rivers, places,
       buildings: [],
     };
   }
@@ -1201,6 +1242,73 @@ const WORLD = (() => {
     return sp;
   }
 
+  function makePlaceLabel(text) {
+    const cv = document.createElement('canvas');
+    cv.width = 512; cv.height = 96;
+    const ctx = cv.getContext('2d');
+    ctx.textAlign = 'center';
+    ctx.font = '600 44px system-ui, sans-serif';
+    ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(10,12,18,0.7)';
+    ctx.strokeText(text, 256, 60);
+    ctx.fillStyle = '#ffe9b0';
+    ctx.fillText(text, 256, 60);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(cv), depthTest: false, transparent: true }));
+    sp.scale.set(54, 10.1, 1);
+    sp.renderOrder = 40;
+    return sp;
+  }
+
+  // A real-text sign board (e.g. "MAZI MALL") as a thin box with the text
+  // baked onto both large faces.
+  function makeSign(text, bgColor, fgColor, w, h) {
+    const cv = document.createElement('canvas');
+    cv.width = 1024; cv.height = Math.max(64, Math.round(1024 * h / w));
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = fgColor;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    let size = Math.floor(cv.height * 0.62);
+    ctx.font = `800 ${size}px system-ui, sans-serif`;
+    while (ctx.measureText(text).width > cv.width * 0.92 && size > 10) {
+      size -= 4; ctx.font = `800 ${size}px system-ui, sans-serif`;
+    }
+    ctx.fillText(text, cv.width / 2, cv.height / 2 + size * 0.05);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = 4;
+    const faceMat = new THREE.MeshBasicMaterial({ map: tex });
+    const sideMat = new THREE.MeshLambertMaterial({ color: bgColor });
+    const geo = new THREE.BoxGeometry(w, h, 0.4);
+    // box material order: +x,-x,+y,-y,+z,-z — text on the two big faces
+    const mesh = new THREE.Mesh(geo, [sideMat, sideMat, sideMat, sideMat, faceMat, faceMat]);
+    return mesh;
+  }
+
+  // Kurdistan flag texture (red-white-green bands, yellow sun) — like the
+  // giant flag displayed on the mountainside above Duhok.
+  function makeKurdistanFlag(w, h) {
+    const cv = document.createElement('canvas');
+    cv.width = 512; cv.height = 320;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#ee3a43'; ctx.fillRect(0, 0, 512, 107);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 107, 512, 107);
+    ctx.fillStyle = '#2a9c48'; ctx.fillRect(0, 214, 512, 106);
+    ctx.fillStyle = '#f8c300';
+    const cx = 256, cy = 160, r1 = 62, r2 = 26;
+    ctx.beginPath();
+    for (let i = 0; i < 42; i++) {
+      const a = i * Math.PI / 21, r = i % 2 === 0 ? r1 : r2;
+      ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy, 30, 0, Math.PI * 2); ctx.fill();
+    const tex = new THREE.CanvasTexture(cv);
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+      new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
+    return mesh;
+  }
+
   function lambert(color) { return new THREE.MeshLambertMaterial({ color }); }
 
   function box(g, w, h, d, color, x, y, z, ry) {
@@ -1249,16 +1357,32 @@ const WORLD = (() => {
         break;
       }
       case 'stadium': {
+        // concrete outer bowl with Duhok SC's yellow-and-blue seating tiers
         const bowl = new THREE.Mesh(
           new THREE.CylinderGeometry(118, 136, 20, 28, 1, true), lambert(0xd8d4c8));
         bowl.material.side = THREE.DoubleSide;
         bowl.scale.z = 0.8;
         bowl.position.y = 10;
         g.add(bowl);
+        const seatsB = new THREE.Mesh(
+          new THREE.CylinderGeometry(105, 116, 7, 28, 1, true), lambert(0x2857a4));
+        seatsB.material.side = THREE.DoubleSide;
+        seatsB.scale.z = 0.8; seatsB.position.y = 14.5;
+        g.add(seatsB);
+        const seatsY = new THREE.Mesh(
+          new THREE.CylinderGeometry(96, 106, 7, 28, 1, true), lambert(0xe8b820));
+        seatsY.material.side = THREE.DoubleSide;
+        seatsY.scale.z = 0.8; seatsY.position.y = 8;
+        g.add(seatsY);
         const pitch = new THREE.Mesh(new THREE.CircleGeometry(95, 24), lambert(0x3f7a2e));
         pitch.rotation.x = -Math.PI / 2; pitch.scale.y = 0.72;
         pitch.position.y = 0.35;
         g.add(pitch);
+        // white roof canopy over the main (west) stand
+        for (let i = -3; i <= 3; i++) {
+          const seg = box(g, 24, 1.2, 34, 0xf2f1ea, -128 + Math.abs(i) * 2.5, 24 - Math.abs(i) * 0.8, i * 26 * 0.8, 0);
+          seg.rotation.z = 0.18;
+        }
         for (let i = 0; i < 4; i++) {
           const a = Math.PI / 4 + i * Math.PI / 2;
           cyl(g, 1.2, 1.6, 42, 0xcccccc, Math.cos(a) * 140, 21, Math.sin(a) * 112 * 0.9, 8);
@@ -1274,14 +1398,23 @@ const WORLD = (() => {
         const campus = [[-70, -20, 0], [10, 10, 0.3], [70, -15, -0.2]];
         for (const [x, z, ry] of campus) {
           box(g, 64, 15, 16, 0xe4ddcc, x, 7.5, z, ry);
-          box(g, 64, 2.5, 17, 0x5f83a8, x, 16.2, z, ry);
+          box(g, 64, 2.5, 17, 0x8a5b38, x, 16.2, z, ry);        // brown roof band
           addCol(66, 20, x, z);
         }
-        // gate
-        box(g, 3, 12, 3, 0xcbbfa5, -14, 6, 60);
-        box(g, 3, 12, 3, 0xcbbfa5, 14, 6, 60);
-        box(g, 34, 3, 4, 0x9a5b2c, 0, 12.5, 60);
+        // clock tower
+        box(g, 7, 26, 7, 0xe4ddcc, -30, 13, 30);
+        box(g, 8, 2, 8, 0x8a5b38, -30, 27, 30);
+        const clock = new THREE.Mesh(new THREE.CircleGeometry(2.2, 16), lambert(0xf8f6ee));
+        clock.position.set(-30, 22, 33.6); g.add(clock);
+        addCol(9, 9, -30, 30);
+        // main gate with name board
+        box(g, 3.4, 13, 3.4, 0xcbbfa5, -16, 6.5, 60);
+        box(g, 3.4, 13, 3.4, 0xcbbfa5, 16, 6.5, 60);
+        box(g, 38, 3.4, 4, 0xb99d6b, 0, 14.7, 60);
+        const usign = makeSign('UNIVERSITY OF DUHOK', '#274d36', '#f3e8c8', 34, 2.8);
+        usign.position.set(0, 14.7, 62.3); g.add(usign);
         cyl(g, 0.3, 0.3, 22, 0xdddddd, 0, 11, 40, 6);
+        addCol(4, 4, -16, 60); addCol(4, 4, 16, 60);
         labelH = 55;
         break;
       }
@@ -1313,39 +1446,61 @@ const WORLD = (() => {
           g.add(leg);
         }
         addCol(14, 20);
-        box(g, 26, 8, 2.2, 0xc9553e, 0, 4, 90);
+        // pond + entrance sign
+        const pond = new THREE.Mesh(new THREE.CircleGeometry(26, 20), lambert(0x2e6f9e));
+        pond.rotation.x = -Math.PI / 2;
+        pond.position.set(55, 0.35, 45);
+        g.add(pond);
+        const psign = makeSign('AZADI PARK', '#1f6a43', '#ffffff', 24, 3.4);
+        psign.position.set(0, 5.5, 90); g.add(psign);
+        box(g, 26, 1.2, 2.2, 0xc9553e, 0, 7.6, 90);
         labelH = 62;
         break;
       }
       case 'bazaar': {
-        // dense covered market + the Grand Mosque
+        // dense covered market + the Grand Mosque (white stone, big dome,
+        // twin minarets with balconies)
         for (let i = 0; i < 8; i++) {
           const x = -55 + (i % 4) * 32, z = -14 + Math.floor(i / 4) * 30;
           box(g, 26, 6.5, 22, 0xcfc3a8, x, 3.25, z);
           box(g, 27, 1.6, 23, 0x9c6b3f, x, 7.2, z);
           addCol(27, 23, x, z);
         }
-        // mosque
-        const hall = box(g, 34, 10, 26, 0xefe8d8, 60, 5, 4);
-        const dome = new THREE.Mesh(new THREE.SphereGeometry(10, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), lambert(0x3e7f5b));
-        dome.position.set(60, 10, 4); g.add(dome);
-        cyl(g, 1.6, 2.1, 34, 0xf4eee0, 42, 17, -8, 10);
-        const cap = new THREE.Mesh(new THREE.ConeGeometry(2.4, 5, 10), lambert(0x3e7f5b));
-        cap.position.set(42, 36.5, -8); g.add(cap);
-        addCol(36, 28, 60, 4);
-        labelH = 52;
+        box(g, 44, 12, 34, 0xf3ede0, 62, 6, 4);                 // prayer hall
+        box(g, 46, 1.2, 36, 0xe3dbc8, 62, 12.4, 4);
+        const drum = cyl(g, 11, 12, 4, 0xf3ede0, 62, 14, 4, 18);
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(11, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), lambert(0x4d8a68));
+        dome.position.set(62, 16, 4); g.add(dome);
+        for (const mz of [-16, 24]) {                            // twin minarets
+          cyl(g, 1.5, 1.9, 40, 0xf6f1e4, 40, 20, mz, 10);
+          cyl(g, 2.3, 2.3, 1.4, 0xe3dbc8, 40, 27, mz, 10);       // balcony
+          cyl(g, 2.3, 2.3, 1.4, 0xe3dbc8, 40, 35, mz, 10);
+          const cap = new THREE.Mesh(new THREE.ConeGeometry(2.1, 5.5, 10), lambert(0x4d8a68));
+          cap.position.set(40, 42.5, mz); g.add(cap);
+        }
+        addCol(46, 36, 62, 4);
+        labelH = 56;
         break;
       }
       case 'mall': {
-        box(g, 130, 17, 62, 0xd7cfc2, 0, 8.5, 0);
+        // per-mall styling: Mazi = blue glass + red sign; others beige
+        const isMazi = lm.id === 'mazi';
+        const bodyColor = isMazi ? 0x6fa8cf : 0xd7cfc2;
+        const body = box(g, 130, 17, 62, bodyColor, 0, 8.5, 0);
+        if (isMazi) body.material = new THREE.MeshPhongMaterial({ color: 0x5f9cc8, shininess: 90, specular: 0xbfd8ea });
         box(g, 130, 3.2, 62, 0x8f8a80, 0, 18.6, 0);
-        box(g, 100, 10, 2, 0x77b7d9, 0, 6, 32);                 // glass front
-        box(g, 46, 7, 1.6, 0xb03a2e, 0, 23, 6);
+        box(g, 100, 10, 2, isMazi ? 0x9cc4e0 : 0x77b7d9, 0, 6, 32);   // glass front
+        const signText = lm.id === 'mazi' ? 'MAZI MALL' : lm.id === 'family' ? 'FAMILY MALL' : 'DUHOK MALL';
+        const sign = makeSign(signText, isMazi ? '#c8102e' : '#b03a2e', '#ffffff', 52, 8);
+        sign.position.set(0, 24.5, 4); g.add(sign);
+        const sign2 = makeSign(signText, isMazi ? '#c8102e' : '#b03a2e', '#ffffff', 30, 5);
+        sign2.position.set(0, 12, 33.5); g.add(sign2);
         addCol(132, 64);
         labelH = 42;
         break;
       }
       case 'dream': {
+        // gated villa community: cream villas, terracotta roofs, grand arch
         for (let rx = 0; rx < 5; rx++) {
           for (let rz = 0; rz < 3; rz++) {
             const x = -90 + rx * 45, z = -50 + rz * 48;
@@ -1357,9 +1512,12 @@ const WORLD = (() => {
             addCol(15, 13, x, z);
           }
         }
-        box(g, 4, 15, 4, 0xd8cbb4, -20, 7.5, 92);
-        box(g, 4, 15, 4, 0xd8cbb4, 20, 7.5, 92);
-        box(g, 48, 4, 5, 0xc27b46, 0, 17, 92);
+        box(g, 5, 16, 5, 0xd8cbb4, -21, 8, 92);
+        box(g, 5, 16, 5, 0xd8cbb4, 21, 8, 92);
+        box(g, 50, 5, 6, 0xc9a86a, 0, 18.5, 92);
+        const dsign = makeSign('DREAM CITY', '#20456e', '#ffe9b0', 40, 4.2);
+        dsign.position.set(0, 18.5, 95.3); g.add(dsign);
+        addCol(6, 6, -21, 92); addCol(6, 6, 21, 92);
         labelH = 48;
         break;
       }
@@ -1453,6 +1611,24 @@ const WORLD = (() => {
       scene.add(grp);
     }
 
+    // real neighbourhood / area name labels floating over their centres
+    const placeSprites = [];
+    for (const pl of city.places || []) {
+      const sp = makePlaceLabel(pl.name);
+      sp.position.set(pl.x, heightAt(pl.x, pl.z) + 34, pl.z);
+      placeSprites.push(sp);
+      scene.add(sp);
+    }
+
+    // the giant Kurdistan flag on the White Mountain slope above the city
+    {
+      const fx = -400, fz = -4150;
+      const flag = makeKurdistanFlag(260, 160);
+      flag.position.set(fx, rawHeight(fx, fz) + 20, fz);
+      flag.rotation.x = -0.42;         // leant back against the slope
+      scene.add(flag);
+    }
+
     buildTrees(scene, city, heightAt, roadIndex);
 
     return {
@@ -1467,6 +1643,7 @@ const WORLD = (() => {
         const cls = OSM.ROAD_CLASSES[r.cls] || OSM.ROAD_CLASSES.residential;
         return { d: hit.d, road: r, halfW: cls.w / 2, name: r.name };
       },
+      places: city.places || [],
       update(dt, px, pz) {
         for (const grp of landmarkGroups) {
           if (grp.userData.wheel) grp.userData.wheel.rotation.z += dt * 0.15;
@@ -1479,6 +1656,16 @@ const WORLD = (() => {
             const op = near * far;
             label.material.opacity = op;
             label.visible = op > 0.02;
+          }
+        }
+        if (px !== undefined) {
+          for (const sp of placeSprites) {
+            const d = Math.hypot(sp.position.x - px, sp.position.z - pz);
+            const near = Math.min(1, Math.max(0, (d - 130) / 90));
+            const far = Math.min(1, Math.max(0, (2600 - d) / 600));
+            const op = near * far * 0.95;
+            sp.material.opacity = op;
+            sp.visible = op > 0.02;
           }
         }
       },
@@ -1715,7 +1902,45 @@ const VEHICLES = (() => {
     return g;
   }
 
-  return { makeEscalade, makeTrafficCar };
+  /* ----------------------------- pedestrian ----------------------------- */
+  // Simple 1.75 m walker for exploring landmarks on foot.  Limb groups are
+  // returned so main.js can swing them while walking.
+  function makePedestrian() {
+    const g = new THREE.Group();
+    const skin = bodyMat(0xd8a877), shirt = bodyMat(0x3f6d9e),
+          pants = bodyMat(0x2c2f36), hair = bodyMat(0x2a221c),
+          shoe = bodyMat(0x1c1c1e);
+    // torso + head
+    bx(g, shirt, 0.42, 0.62, 0.24, 0, 1.18, 0);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.135, 12, 10), skin);
+    head.position.set(0, 1.63, 0); g.add(head);
+    const hairCap = new THREE.Mesh(
+      new THREE.SphereGeometry(0.14, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), hair);
+    hairCap.position.set(0, 1.65, 0); g.add(hairCap);
+    // limbs pivot at shoulder/hip
+    const limb = (mat, w, len, x, y) => {
+      const pivot = new THREE.Group();
+      pivot.position.set(x, y, 0);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, len, w), mat);
+      m.position.y = -len / 2;
+      pivot.add(m);
+      g.add(pivot);
+      return pivot;
+    };
+    const lArm = limb(shirt, 0.11, 0.58, -0.28, 1.46);
+    const rArm = limb(shirt, 0.11, 0.58, 0.28, 1.46);
+    const lLeg = limb(pants, 0.15, 0.82, -0.11, 0.87);
+    const rLeg = limb(pants, 0.15, 0.82, 0.11, 0.87);
+    // shoes attached to legs
+    for (const leg of [lLeg, rLeg]) {
+      const s = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.09, 0.28), shoe);
+      s.position.set(0, -0.82, 0.05);
+      leg.add(s);
+    }
+    return { group: g, limbs: { lArm, rArm, lLeg, rLeg } };
+  }
+
+  return { makeEscalade, makeTrafficCar, makePedestrian };
 })();
 
 </script>
@@ -2079,6 +2304,7 @@ const TRAFFIC = (() => {
           check(o.x, o.z, o.speed, 2.3);
         }
         check(player.x, player.z, player.speed, 2.6);
+        if (player.parked) check(player.parked.x, player.parked.z, 0, 2.6);
         if (obsD < 1e9) {
           const safe = 7 + car.speed * 0.9;
           if (obsD < safe) target = Math.min(target, Math.max(0, obsSpeed - 0.5));
@@ -2196,11 +2422,11 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
   }
 
   /* -------------------------------- input ------------------------------- */
-  const input = { fwd: 0, back: 0, left: 0, right: 0, hand: 0 };
+  const input = { fwd: 0, back: 0, left: 0, right: 0, hand: 0, run: 0 };
   const KEYMAP = {
     KeyW: 'fwd', ArrowUp: 'fwd', KeyS: 'back', ArrowDown: 'back',
     KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
-    Space: 'hand',
+    Space: 'hand', ShiftLeft: 'run', ShiftRight: 'run',
   };
   function initInput() {
     window.addEventListener('keydown', e => {
@@ -2210,6 +2436,7 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       if (e.code === 'KeyM') toggleMap();
       if (e.code === 'KeyR') resetToRoad();
       if (e.code === 'KeyH') audio && audio.horn();
+      if (e.code === 'KeyF' || e.code === 'KeyE') toggleWalkMode();
     });
     window.addEventListener('keyup', e => {
       const k = KEYMAP[e.code];
@@ -2225,6 +2452,7 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       };
       bind('t-left', 'left'); bind('t-right', 'right');
       bind('t-gas', 'fwd'); bind('t-brake', 'back');
+      $('t-use').addEventListener('touchstart', e => { toggleWalkMode(); e.preventDefault(); }, { passive: false });
     }
   }
 
@@ -2232,8 +2460,14 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
   function initPlayer() {
     const esc = VEHICLES.makeEscalade();
     scene.add(esc.group);
+    const ped = VEHICLES.makePedestrian();
+    ped.group.visible = false;
+    scene.add(ped.group);
     player = {
-      car: esc,
+      car: esc, ped,
+      mode: 'drive',                     // 'drive' | 'walk'
+      carPos: { x: 0, z: 0, heading: 0 },
+      walkPhase: 0,
       x: 0, z: 0, y: 0, heading: 0,
       v: 0, steer: 0, wheelSpin: 0,
       speed: 0,           // |v| for traffic API
@@ -2256,7 +2490,36 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     player.camPos.set(player.x - Math.sin(player.heading) * 12, 5, player.z - Math.cos(player.heading) * 12);
   }
 
+  /* ------------------------- get in / out of the car --------------------- */
+  function toggleWalkMode() {
+    if (!player || !running) return;
+    if (player.mode === 'drive') {
+      if (player.speed > 3) { toast('Stop the car first, then press F to get out'); return; }
+      player.carPos = { x: player.x, z: player.z, heading: player.heading };
+      player.v = 0;
+      player.car.setBrake(false);
+      // step out on the driver's (left) side
+      const fx = Math.sin(player.heading), fz = Math.cos(player.heading);
+      player.x += fz * 2.0; player.z += -fx * 2.0;
+      player.mode = 'walk';
+      player.ped.group.visible = true;
+      player.camMode = 0;
+      toast('🚶 Exploring on foot — walk up to the car and press F to drive');
+    } else {
+      const d = Math.hypot(player.x - player.carPos.x, player.z - player.carPos.z);
+      if (d > 4.5) { toast('Your Escalade is ' + Math.round(d) + ' m away — walk closer to get in'); return; }
+      player.x = player.carPos.x; player.z = player.carPos.z;
+      player.heading = player.carPos.heading;
+      player.v = 0;
+      player.mode = 'drive';
+      player.ped.group.visible = false;
+      player.camMode = 0;
+      toast('🚙 Back behind the wheel');
+    }
+  }
+
   function resetToRoad() {
+    if (player.mode === 'walk') { toast('Get back in the car first (walk to it and press F)'); return; }
     const hit = world.roadIndex.nearest(player.x, player.z, 2500);
     if (!hit) return;
     const s = hit.seg;
@@ -2274,7 +2537,73 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
   const ESC = { vmax: 50, vmaxRev: -9, wb: 3.07 };
 
   function updatePlayer(dt) {
+    if (player.mode === 'walk') updateWalk(dt);
+    else updateDrive(dt);
+  }
+
+  /* ------------------------------ on foot -------------------------------- */
+  function updateWalk(dt) {
     const p = player;
+    // tank-style controls like the car: A/D turn, W/S walk
+    p.heading += (input.left - input.right) * 2.6 * dt * (input.back ? -1 : 1);
+    const target = input.fwd ? (input.run ? 5.2 : 2.2) : (input.back ? -1.3 : 0);
+    p.v += (target - p.v) * Math.min(1, dt * 8);
+    const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
+    p.x += fx * p.v * dt;
+    p.z += fz * p.v * dt;
+    p.speed = Math.abs(p.v);
+
+    // collisions: buildings/landmarks
+    const r = 0.42;
+    for (const b of world.collisions.query(p.x, p.z, r + 1)) {
+      const nx = clamp(p.x, b.x0, b.x1), nz = clamp(p.z, b.z0, b.z1);
+      const dx = p.x - nx, dz = p.z - nz;
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= r * r) continue;
+      const d = Math.sqrt(d2) || 0.001;
+      p.x += (dx / d) * (r - d); p.z += (dz / d) * (r - d);
+    }
+    // collisions: traffic cars and the parked Escalade
+    const solids = [];
+    for (const car of traffic.cars) {
+      if (car.active) solids.push({ x: car.x, z: car.z, h: car.heading, half: car.halfLen * 0.6, r: 1.05 });
+    }
+    solids.push({ x: p.carPos.x, z: p.carPos.z, h: p.carPos.heading, half: 1.6, r: 1.12 });
+    for (const s of solids) {
+      if (Math.abs(s.x - p.x) > 8 || Math.abs(s.z - p.z) > 8) continue;
+      for (const off of [s.half, -s.half]) {
+        const cx = s.x + Math.sin(s.h) * off, cz = s.z + Math.cos(s.h) * off;
+        const dx = p.x - cx, dz = p.z - cz;
+        const rr = r + s.r;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= rr * rr) continue;
+        const d = Math.sqrt(d2) || 0.001;
+        p.x += (dx / d) * (rr - d); p.z += (dz / d) * (rr - d);
+      }
+    }
+
+    p.y = world.heightAt(p.x, p.z);
+    const road = world.nearestRoad(p.x, p.z, 160);
+    p.offroad = !road || road.d > road.halfW + 2.0;
+    p.roadName = road && road.d < road.halfW + 12 ? road.name : '';
+
+    // pedestrian mesh + walk cycle
+    const g = p.ped.group;
+    g.position.set(p.x, p.y, p.z);
+    g.rotation.y = p.heading;
+    p.walkPhase += p.speed * dt * 3.4;
+    const swing = Math.sin(p.walkPhase) * Math.min(1, p.speed / 1.5) * 0.7;
+    const L = p.ped.limbs;
+    L.lArm.rotation.x = swing; L.rArm.rotation.x = -swing;
+    L.lLeg.rotation.x = -swing; L.rLeg.rotation.x = swing;
+    // tell the traffic AI about the parked car so nobody drives through it
+    p.parked = p.carPos;
+  }
+
+  /* ------------------------------ driving -------------------------------- */
+  function updateDrive(dt) {
+    const p = player;
+    p.parked = null;
     const throttle = input.fwd, reverse = input.back;
 
     // --- longitudinal
@@ -2393,10 +2722,15 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     { d: 7.6, h: 3.0, look: 5, fov: 65 },    // close chase
     { d: -0.4, h: 2.05, look: 30, fov: 70 }, // hood
   ];
-  function cycleCamera() { player.camMode = (player.camMode + 1) % CAMS.length; }
+  const WALK_CAMS = [
+    { d: 4.6, h: 2.3, look: 5, fov: 60 },    // over the shoulder
+    { d: 2.5, h: 1.95, look: 8, fov: 60 },   // close
+  ];
+  function activeCams() { return player.mode === 'walk' ? WALK_CAMS : CAMS; }
+  function cycleCamera() { player.camMode = (player.camMode + 1) % activeCams().length; }
 
   function updateCamera(dt) {
-    const p = player, c = CAMS[p.camMode];
+    const p = player, c = activeCams()[p.camMode % activeCams().length];
     const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
     const tx = p.x - fx * c.d, tz = p.z - fz * c.d;
     const ty = p.y + c.h + (c.d > 0 ? Math.max(0, world.heightAt(tx, tz) - p.y) : 0);
@@ -2409,7 +2743,7 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       camera.position.x += (Math.random() - 0.5) * p.shake;
       camera.position.y += (Math.random() - 0.5) * p.shake * 0.6;
     }
-    camera.lookAt(p.x + fx * c.look, p.y + 1.7, p.z + fz * c.look);
+    camera.lookAt(p.x + fx * c.look, p.y + (p.mode === 'walk' ? 1.5 : 1.7), p.z + fz * c.look);
     const targetFov = c.fov + p.speed * 0.18;
     camera.fov += (clamp(targetFov, c.fov, c.fov + 10) - camera.fov) * Math.min(1, dt * 3);
     camera.updateProjectionMatrix();
@@ -2561,7 +2895,22 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     $('speed').textContent = Math.round(player.speed * 3.6);
     if (hudTimer <= 0) {
       hudTimer = 0.25;
-      $('roadname').textContent = player.roadName || (player.offroad ? 'off-road' : '');
+      // current area = nearest named place
+      let area = '';
+      let bestD = 1200;
+      for (const pl of world.places || []) {
+        const d = Math.hypot(pl.x - player.x, pl.z - player.z);
+        if (d < bestD) { bestD = d; area = pl.name; }
+      }
+      const road = player.roadName || (player.offroad ? (player.mode === 'walk' ? '' : 'off-road') : '');
+      $('roadname').textContent = road && area ? `${road} — ${area}` : (road || area);
+      // contextual hint when on foot next to the car
+      if (player.mode === 'walk') {
+        const d = Math.hypot(player.x - player.carPos.x, player.z - player.carPos.z);
+        $('hint').textContent = d < 4.5 ? 'Press F to get in the Escalade' : '';
+      } else {
+        $('hint').textContent = '';
+      }
       // landmark proximity
       for (const lm of OSM.LANDMARKS) {
         const p = OSM.project(lm.lat, lm.lon);
@@ -2650,7 +2999,11 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     updateCamera(dt);
     updateHUD(dt);
     drawMinimap();
-    if (audio) audio.update(player.speed, input.fwd);
+    if (audio) {
+      // engine idles while you're out exploring on foot
+      if (player.mode === 'walk') audio.update(0, 0);
+      else audio.update(player.speed, input.fwd);
+    }
     renderer.render(scene, camera);
     // lightweight debug surface (used by the automated tests)
     window.__DUHOK_DEBUG__ = {

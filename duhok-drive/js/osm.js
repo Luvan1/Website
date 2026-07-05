@@ -25,7 +25,7 @@ const OSM = (() => {
   // Buildings are only fetched for the urban core (keeps download reasonable).
   const BBOX_BUILDINGS = { s: 36.8330, w: 42.9250, n: 36.8960, e: 43.0400 };
 
-  const CACHE_KEY = 'duhok-city-v1';
+  const CACHE_KEY = 'duhok-city-v2';
 
   function project(lat, lon) {
     return {
@@ -73,8 +73,9 @@ const OSM = (() => {
     unclassified:   { w: 6.5,kph: 40,  dual: false, rank: 4 },
     residential:    { w: 6.5,kph: 35,  dual: false, rank: 4 },
     living_street:  { w: 5.5,kph: 20,  dual: false, rank: 5 },
+    service:        { w: 4.5,kph: 25,  dual: false, rank: 6 },
   };
-  const HIGHWAY_REGEX = Object.keys(ROAD_CLASSES).join('|');
+  const HIGHWAY_REGEX = Object.keys(ROAD_CLASSES).filter(k => k !== 'service').join('|');
 
   const MIRRORS = [
     'https://overpass-api.de/api/interpreter',
@@ -85,7 +86,10 @@ const OSM = (() => {
 
   function bboxStr(b) { return `${b.s},${b.w},${b.n},${b.e}`; }
 
-  const Q_ROADS = `[out:json][timeout:120];way["highway"~"^(${HIGHWAY_REGEX})$"](${bboxStr(BBOX)});out geom qt;`;
+  // service roads (campus/mall/compound access lanes) are included, but not
+  // parking aisles and private driveways
+  const Q_ROADS = `[out:json][timeout:120];(way["highway"~"^(${HIGHWAY_REGEX})$"](${bboxStr(BBOX)});way["highway"="service"]["service"!~"parking_aisle|driveway"](${bboxStr(BBOX)}););out geom qt;`;
+  const Q_PLACES = `[out:json][timeout:60];node["place"~"^(suburb|neighbourhood|quarter|town|village|hamlet)$"](${bboxStr(BBOX)});out qt;`;
   const Q_AREAS = `[out:json][timeout:90];(way["natural"="water"](${bboxStr(BBOX)});relation["natural"="water"](${bboxStr(BBOX)});way["leisure"~"^(park|garden|pitch|stadium)$"](${bboxStr(BBOX)});way["landuse"~"^(forest|grass|recreation_ground|cemetery)$"](${bboxStr(BBOX)});way["waterway"="river"](${bboxStr(BBOX)}););out geom qt;`;
   const Q_BUILDINGS = `[out:json][timeout:120];way["building"](${bboxStr(BBOX_BUILDINGS)});out geom qt;`;
 
@@ -300,6 +304,19 @@ const OSM = (() => {
     return buildings;
   }
 
+  function parsePlaces(json) {
+    const places = [];
+    for (const el of json.elements) {
+      if (el.type !== 'node' || !el.tags || !el.tags.name) continue;
+      const p = project(el.lat, el.lon);
+      places.push({
+        name: el.tags['name:en'] || el.tags.name,
+        x: p.x, z: p.z, kind: el.tags.place,
+      });
+    }
+    return places;
+  }
+
   /* ------------------------------ Main load ------------------------------ */
   async function loadCity(opts) {
     const onStatus = opts.onStatus || (() => {});
@@ -335,10 +352,15 @@ const OSM = (() => {
         buildings = parseBuildings(await fetchOverpass(Q_BUILDINGS, 'Real buildings', onStatus, mirrors, 70000));
       } catch (e) { console.warn('buildings fetch failed', e); }
 
+      let places = [];
+      try {
+        places = parsePlaces(await fetchOverpass(Q_PLACES, 'District & area names', onStatus, mirrors, 25000));
+      } catch (e) { console.warn('places fetch failed', e); }
+
       const city = {
         source: 'osm',
         attribution: 'Map data © OpenStreetMap contributors (ODbL)',
-        roads, buildings,
+        roads, buildings, places,
         waters: areas.waters, greens: areas.greens, rivers: areas.rivers,
       };
       onStatus('Saving map to cache…');

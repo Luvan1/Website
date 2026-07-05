@@ -223,5 +223,43 @@ const VEHICLES = (() => {
     return g;
   }
 
-  return { makeEscalade, makeTrafficCar };
+  /* ----------------------------- pedestrian ----------------------------- */
+  // Simple 1.75 m walker for exploring landmarks on foot.  Limb groups are
+  // returned so main.js can swing them while walking.
+  function makePedestrian() {
+    const g = new THREE.Group();
+    const skin = bodyMat(0xd8a877), shirt = bodyMat(0x3f6d9e),
+          pants = bodyMat(0x2c2f36), hair = bodyMat(0x2a221c),
+          shoe = bodyMat(0x1c1c1e);
+    // torso + head
+    bx(g, shirt, 0.42, 0.62, 0.24, 0, 1.18, 0);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.135, 12, 10), skin);
+    head.position.set(0, 1.63, 0); g.add(head);
+    const hairCap = new THREE.Mesh(
+      new THREE.SphereGeometry(0.14, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), hair);
+    hairCap.position.set(0, 1.65, 0); g.add(hairCap);
+    // limbs pivot at shoulder/hip
+    const limb = (mat, w, len, x, y) => {
+      const pivot = new THREE.Group();
+      pivot.position.set(x, y, 0);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, len, w), mat);
+      m.position.y = -len / 2;
+      pivot.add(m);
+      g.add(pivot);
+      return pivot;
+    };
+    const lArm = limb(shirt, 0.11, 0.58, -0.28, 1.46);
+    const rArm = limb(shirt, 0.11, 0.58, 0.28, 1.46);
+    const lLeg = limb(pants, 0.15, 0.82, -0.11, 0.87);
+    const rLeg = limb(pants, 0.15, 0.82, 0.11, 0.87);
+    // shoes attached to legs
+    for (const leg of [lLeg, rLeg]) {
+      const s = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.09, 0.28), shoe);
+      s.position.set(0, -0.82, 0.05);
+      leg.add(s);
+    }
+    return { group: g, limbs: { lArm, rArm, lLeg, rLeg } };
+  }
+
+  return { makeEscalade, makeTrafficCar, makePedestrian };
 })();

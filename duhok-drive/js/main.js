@@ -50,11 +50,11 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
   }
 
   /* -------------------------------- input ------------------------------- */
-  const input = { fwd: 0, back: 0, left: 0, right: 0, hand: 0 };
+  const input = { fwd: 0, back: 0, left: 0, right: 0, hand: 0, run: 0 };
   const KEYMAP = {
     KeyW: 'fwd', ArrowUp: 'fwd', KeyS: 'back', ArrowDown: 'back',
     KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
-    Space: 'hand',
+    Space: 'hand', ShiftLeft: 'run', ShiftRight: 'run',
   };
   function initInput() {
     window.addEventListener('keydown', e => {
@@ -64,6 +64,7 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       if (e.code === 'KeyM') toggleMap();
       if (e.code === 'KeyR') resetToRoad();
       if (e.code === 'KeyH') audio && audio.horn();
+      if (e.code === 'KeyF' || e.code === 'KeyE') toggleWalkMode();
     });
     window.addEventListener('keyup', e => {
       const k = KEYMAP[e.code];
@@ -79,6 +80,7 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       };
       bind('t-left', 'left'); bind('t-right', 'right');
       bind('t-gas', 'fwd'); bind('t-brake', 'back');
+      $('t-use').addEventListener('touchstart', e => { toggleWalkMode(); e.preventDefault(); }, { passive: false });
     }
   }
 
@@ -86,8 +88,14 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
   function initPlayer() {
     const esc = VEHICLES.makeEscalade();
     scene.add(esc.group);
+    const ped = VEHICLES.makePedestrian();
+    ped.group.visible = false;
+    scene.add(ped.group);
     player = {
-      car: esc,
+      car: esc, ped,
+      mode: 'drive',                     // 'drive' | 'walk'
+      carPos: { x: 0, z: 0, heading: 0 },
+      walkPhase: 0,
       x: 0, z: 0, y: 0, heading: 0,
       v: 0, steer: 0, wheelSpin: 0,
       speed: 0,           // |v| for traffic API
@@ -110,7 +118,36 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     player.camPos.set(player.x - Math.sin(player.heading) * 12, 5, player.z - Math.cos(player.heading) * 12);
   }
 
+  /* ------------------------- get in / out of the car --------------------- */
+  function toggleWalkMode() {
+    if (!player || !running) return;
+    if (player.mode === 'drive') {
+      if (player.speed > 3) { toast('Stop the car first, then press F to get out'); return; }
+      player.carPos = { x: player.x, z: player.z, heading: player.heading };
+      player.v = 0;
+      player.car.setBrake(false);
+      // step out on the driver's (left) side
+      const fx = Math.sin(player.heading), fz = Math.cos(player.heading);
+      player.x += fz * 2.0; player.z += -fx * 2.0;
+      player.mode = 'walk';
+      player.ped.group.visible = true;
+      player.camMode = 0;
+      toast('🚶 Exploring on foot — walk up to the car and press F to drive');
+    } else {
+      const d = Math.hypot(player.x - player.carPos.x, player.z - player.carPos.z);
+      if (d > 4.5) { toast('Your Escalade is ' + Math.round(d) + ' m away — walk closer to get in'); return; }
+      player.x = player.carPos.x; player.z = player.carPos.z;
+      player.heading = player.carPos.heading;
+      player.v = 0;
+      player.mode = 'drive';
+      player.ped.group.visible = false;
+      player.camMode = 0;
+      toast('🚙 Back behind the wheel');
+    }
+  }
+
   function resetToRoad() {
+    if (player.mode === 'walk') { toast('Get back in the car first (walk to it and press F)'); return; }
     const hit = world.roadIndex.nearest(player.x, player.z, 2500);
     if (!hit) return;
     const s = hit.seg;
@@ -128,7 +165,73 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
   const ESC = { vmax: 50, vmaxRev: -9, wb: 3.07 };
 
   function updatePlayer(dt) {
+    if (player.mode === 'walk') updateWalk(dt);
+    else updateDrive(dt);
+  }
+
+  /* ------------------------------ on foot -------------------------------- */
+  function updateWalk(dt) {
     const p = player;
+    // tank-style controls like the car: A/D turn, W/S walk
+    p.heading += (input.left - input.right) * 2.6 * dt * (input.back ? -1 : 1);
+    const target = input.fwd ? (input.run ? 5.2 : 2.2) : (input.back ? -1.3 : 0);
+    p.v += (target - p.v) * Math.min(1, dt * 8);
+    const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
+    p.x += fx * p.v * dt;
+    p.z += fz * p.v * dt;
+    p.speed = Math.abs(p.v);
+
+    // collisions: buildings/landmarks
+    const r = 0.42;
+    for (const b of world.collisions.query(p.x, p.z, r + 1)) {
+      const nx = clamp(p.x, b.x0, b.x1), nz = clamp(p.z, b.z0, b.z1);
+      const dx = p.x - nx, dz = p.z - nz;
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= r * r) continue;
+      const d = Math.sqrt(d2) || 0.001;
+      p.x += (dx / d) * (r - d); p.z += (dz / d) * (r - d);
+    }
+    // collisions: traffic cars and the parked Escalade
+    const solids = [];
+    for (const car of traffic.cars) {
+      if (car.active) solids.push({ x: car.x, z: car.z, h: car.heading, half: car.halfLen * 0.6, r: 1.05 });
+    }
+    solids.push({ x: p.carPos.x, z: p.carPos.z, h: p.carPos.heading, half: 1.6, r: 1.12 });
+    for (const s of solids) {
+      if (Math.abs(s.x - p.x) > 8 || Math.abs(s.z - p.z) > 8) continue;
+      for (const off of [s.half, -s.half]) {
+        const cx = s.x + Math.sin(s.h) * off, cz = s.z + Math.cos(s.h) * off;
+        const dx = p.x - cx, dz = p.z - cz;
+        const rr = r + s.r;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= rr * rr) continue;
+        const d = Math.sqrt(d2) || 0.001;
+        p.x += (dx / d) * (rr - d); p.z += (dz / d) * (rr - d);
+      }
+    }
+
+    p.y = world.heightAt(p.x, p.z);
+    const road = world.nearestRoad(p.x, p.z, 160);
+    p.offroad = !road || road.d > road.halfW + 2.0;
+    p.roadName = road && road.d < road.halfW + 12 ? road.name : '';
+
+    // pedestrian mesh + walk cycle
+    const g = p.ped.group;
+    g.position.set(p.x, p.y, p.z);
+    g.rotation.y = p.heading;
+    p.walkPhase += p.speed * dt * 3.4;
+    const swing = Math.sin(p.walkPhase) * Math.min(1, p.speed / 1.5) * 0.7;
+    const L = p.ped.limbs;
+    L.lArm.rotation.x = swing; L.rArm.rotation.x = -swing;
+    L.lLeg.rotation.x = -swing; L.rLeg.rotation.x = swing;
+    // tell the traffic AI about the parked car so nobody drives through it
+    p.parked = p.carPos;
+  }
+
+  /* ------------------------------ driving -------------------------------- */
+  function updateDrive(dt) {
+    const p = player;
+    p.parked = null;
     const throttle = input.fwd, reverse = input.back;
 
     // --- longitudinal
@@ -247,10 +350,15 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     { d: 7.6, h: 3.0, look: 5, fov: 65 },    // close chase
     { d: -0.4, h: 2.05, look: 30, fov: 70 }, // hood
   ];
-  function cycleCamera() { player.camMode = (player.camMode + 1) % CAMS.length; }
+  const WALK_CAMS = [
+    { d: 4.6, h: 2.3, look: 5, fov: 60 },    // over the shoulder
+    { d: 2.5, h: 1.95, look: 8, fov: 60 },   // close
+  ];
+  function activeCams() { return player.mode === 'walk' ? WALK_CAMS : CAMS; }
+  function cycleCamera() { player.camMode = (player.camMode + 1) % activeCams().length; }
 
   function updateCamera(dt) {
-    const p = player, c = CAMS[p.camMode];
+    const p = player, c = activeCams()[p.camMode % activeCams().length];
     const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
     const tx = p.x - fx * c.d, tz = p.z - fz * c.d;
     const ty = p.y + c.h + (c.d > 0 ? Math.max(0, world.heightAt(tx, tz) - p.y) : 0);
@@ -263,7 +371,7 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       camera.position.x += (Math.random() - 0.5) * p.shake;
       camera.position.y += (Math.random() - 0.5) * p.shake * 0.6;
     }
-    camera.lookAt(p.x + fx * c.look, p.y + 1.7, p.z + fz * c.look);
+    camera.lookAt(p.x + fx * c.look, p.y + (p.mode === 'walk' ? 1.5 : 1.7), p.z + fz * c.look);
     const targetFov = c.fov + p.speed * 0.18;
     camera.fov += (clamp(targetFov, c.fov, c.fov + 10) - camera.fov) * Math.min(1, dt * 3);
     camera.updateProjectionMatrix();
@@ -415,7 +523,22 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     $('speed').textContent = Math.round(player.speed * 3.6);
     if (hudTimer <= 0) {
       hudTimer = 0.25;
-      $('roadname').textContent = player.roadName || (player.offroad ? 'off-road' : '');
+      // current area = nearest named place
+      let area = '';
+      let bestD = 1200;
+      for (const pl of world.places || []) {
+        const d = Math.hypot(pl.x - player.x, pl.z - player.z);
+        if (d < bestD) { bestD = d; area = pl.name; }
+      }
+      const road = player.roadName || (player.offroad ? (player.mode === 'walk' ? '' : 'off-road') : '');
+      $('roadname').textContent = road && area ? `${road} — ${area}` : (road || area);
+      // contextual hint when on foot next to the car
+      if (player.mode === 'walk') {
+        const d = Math.hypot(player.x - player.carPos.x, player.z - player.carPos.z);
+        $('hint').textContent = d < 4.5 ? 'Press F to get in the Escalade' : '';
+      } else {
+        $('hint').textContent = '';
+      }
       // landmark proximity
       for (const lm of OSM.LANDMARKS) {
         const p = OSM.project(lm.lat, lm.lon);
@@ -504,7 +627,11 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     updateCamera(dt);
     updateHUD(dt);
     drawMinimap();
-    if (audio) audio.update(player.speed, input.fwd);
+    if (audio) {
+      // engine idles while you're out exploring on foot
+      if (player.mode === 'walk') audio.update(0, 0);
+      else audio.update(player.speed, input.fwd);
+    }
     renderer.render(scene, camera);
     // lightweight debug surface (used by the automated tests)
     window.__DUHOK_DEBUG__ = {

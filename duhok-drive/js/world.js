@@ -486,6 +486,73 @@ const WORLD = (() => {
     return sp;
   }
 
+  function makePlaceLabel(text) {
+    const cv = document.createElement('canvas');
+    cv.width = 512; cv.height = 96;
+    const ctx = cv.getContext('2d');
+    ctx.textAlign = 'center';
+    ctx.font = '600 44px system-ui, sans-serif';
+    ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(10,12,18,0.7)';
+    ctx.strokeText(text, 256, 60);
+    ctx.fillStyle = '#ffe9b0';
+    ctx.fillText(text, 256, 60);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(cv), depthTest: false, transparent: true }));
+    sp.scale.set(54, 10.1, 1);
+    sp.renderOrder = 40;
+    return sp;
+  }
+
+  // A real-text sign board (e.g. "MAZI MALL") as a thin box with the text
+  // baked onto both large faces.
+  function makeSign(text, bgColor, fgColor, w, h) {
+    const cv = document.createElement('canvas');
+    cv.width = 1024; cv.height = Math.max(64, Math.round(1024 * h / w));
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = fgColor;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    let size = Math.floor(cv.height * 0.62);
+    ctx.font = `800 ${size}px system-ui, sans-serif`;
+    while (ctx.measureText(text).width > cv.width * 0.92 && size > 10) {
+      size -= 4; ctx.font = `800 ${size}px system-ui, sans-serif`;
+    }
+    ctx.fillText(text, cv.width / 2, cv.height / 2 + size * 0.05);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = 4;
+    const faceMat = new THREE.MeshBasicMaterial({ map: tex });
+    const sideMat = new THREE.MeshLambertMaterial({ color: bgColor });
+    const geo = new THREE.BoxGeometry(w, h, 0.4);
+    // box material order: +x,-x,+y,-y,+z,-z — text on the two big faces
+    const mesh = new THREE.Mesh(geo, [sideMat, sideMat, sideMat, sideMat, faceMat, faceMat]);
+    return mesh;
+  }
+
+  // Kurdistan flag texture (red-white-green bands, yellow sun) — like the
+  // giant flag displayed on the mountainside above Duhok.
+  function makeKurdistanFlag(w, h) {
+    const cv = document.createElement('canvas');
+    cv.width = 512; cv.height = 320;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#ee3a43'; ctx.fillRect(0, 0, 512, 107);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 107, 512, 107);
+    ctx.fillStyle = '#2a9c48'; ctx.fillRect(0, 214, 512, 106);
+    ctx.fillStyle = '#f8c300';
+    const cx = 256, cy = 160, r1 = 62, r2 = 26;
+    ctx.beginPath();
+    for (let i = 0; i < 42; i++) {
+      const a = i * Math.PI / 21, r = i % 2 === 0 ? r1 : r2;
+      ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy, 30, 0, Math.PI * 2); ctx.fill();
+    const tex = new THREE.CanvasTexture(cv);
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+      new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
+    return mesh;
+  }
+
   function lambert(color) { return new THREE.MeshLambertMaterial({ color }); }
 
   function box(g, w, h, d, color, x, y, z, ry) {
@@ -534,16 +601,32 @@ const WORLD = (() => {
         break;
       }
       case 'stadium': {
+        // concrete outer bowl with Duhok SC's yellow-and-blue seating tiers
         const bowl = new THREE.Mesh(
           new THREE.CylinderGeometry(118, 136, 20, 28, 1, true), lambert(0xd8d4c8));
         bowl.material.side = THREE.DoubleSide;
         bowl.scale.z = 0.8;
         bowl.position.y = 10;
         g.add(bowl);
+        const seatsB = new THREE.Mesh(
+          new THREE.CylinderGeometry(105, 116, 7, 28, 1, true), lambert(0x2857a4));
+        seatsB.material.side = THREE.DoubleSide;
+        seatsB.scale.z = 0.8; seatsB.position.y = 14.5;
+        g.add(seatsB);
+        const seatsY = new THREE.Mesh(
+          new THREE.CylinderGeometry(96, 106, 7, 28, 1, true), lambert(0xe8b820));
+        seatsY.material.side = THREE.DoubleSide;
+        seatsY.scale.z = 0.8; seatsY.position.y = 8;
+        g.add(seatsY);
         const pitch = new THREE.Mesh(new THREE.CircleGeometry(95, 24), lambert(0x3f7a2e));
         pitch.rotation.x = -Math.PI / 2; pitch.scale.y = 0.72;
         pitch.position.y = 0.35;
         g.add(pitch);
+        // white roof canopy over the main (west) stand
+        for (let i = -3; i <= 3; i++) {
+          const seg = box(g, 24, 1.2, 34, 0xf2f1ea, -128 + Math.abs(i) * 2.5, 24 - Math.abs(i) * 0.8, i * 26 * 0.8, 0);
+          seg.rotation.z = 0.18;
+        }
         for (let i = 0; i < 4; i++) {
           const a = Math.PI / 4 + i * Math.PI / 2;
           cyl(g, 1.2, 1.6, 42, 0xcccccc, Math.cos(a) * 140, 21, Math.sin(a) * 112 * 0.9, 8);
@@ -559,14 +642,23 @@ const WORLD = (() => {
         const campus = [[-70, -20, 0], [10, 10, 0.3], [70, -15, -0.2]];
         for (const [x, z, ry] of campus) {
           box(g, 64, 15, 16, 0xe4ddcc, x, 7.5, z, ry);
-          box(g, 64, 2.5, 17, 0x5f83a8, x, 16.2, z, ry);
+          box(g, 64, 2.5, 17, 0x8a5b38, x, 16.2, z, ry);        // brown roof band
           addCol(66, 20, x, z);
         }
-        // gate
-        box(g, 3, 12, 3, 0xcbbfa5, -14, 6, 60);
-        box(g, 3, 12, 3, 0xcbbfa5, 14, 6, 60);
-        box(g, 34, 3, 4, 0x9a5b2c, 0, 12.5, 60);
+        // clock tower
+        box(g, 7, 26, 7, 0xe4ddcc, -30, 13, 30);
+        box(g, 8, 2, 8, 0x8a5b38, -30, 27, 30);
+        const clock = new THREE.Mesh(new THREE.CircleGeometry(2.2, 16), lambert(0xf8f6ee));
+        clock.position.set(-30, 22, 33.6); g.add(clock);
+        addCol(9, 9, -30, 30);
+        // main gate with name board
+        box(g, 3.4, 13, 3.4, 0xcbbfa5, -16, 6.5, 60);
+        box(g, 3.4, 13, 3.4, 0xcbbfa5, 16, 6.5, 60);
+        box(g, 38, 3.4, 4, 0xb99d6b, 0, 14.7, 60);
+        const usign = makeSign('UNIVERSITY OF DUHOK', '#274d36', '#f3e8c8', 34, 2.8);
+        usign.position.set(0, 14.7, 62.3); g.add(usign);
         cyl(g, 0.3, 0.3, 22, 0xdddddd, 0, 11, 40, 6);
+        addCol(4, 4, -16, 60); addCol(4, 4, 16, 60);
         labelH = 55;
         break;
       }
@@ -598,39 +690,61 @@ const WORLD = (() => {
           g.add(leg);
         }
         addCol(14, 20);
-        box(g, 26, 8, 2.2, 0xc9553e, 0, 4, 90);
+        // pond + entrance sign
+        const pond = new THREE.Mesh(new THREE.CircleGeometry(26, 20), lambert(0x2e6f9e));
+        pond.rotation.x = -Math.PI / 2;
+        pond.position.set(55, 0.35, 45);
+        g.add(pond);
+        const psign = makeSign('AZADI PARK', '#1f6a43', '#ffffff', 24, 3.4);
+        psign.position.set(0, 5.5, 90); g.add(psign);
+        box(g, 26, 1.2, 2.2, 0xc9553e, 0, 7.6, 90);
         labelH = 62;
         break;
       }
       case 'bazaar': {
-        // dense covered market + the Grand Mosque
+        // dense covered market + the Grand Mosque (white stone, big dome,
+        // twin minarets with balconies)
         for (let i = 0; i < 8; i++) {
           const x = -55 + (i % 4) * 32, z = -14 + Math.floor(i / 4) * 30;
           box(g, 26, 6.5, 22, 0xcfc3a8, x, 3.25, z);
           box(g, 27, 1.6, 23, 0x9c6b3f, x, 7.2, z);
           addCol(27, 23, x, z);
         }
-        // mosque
-        const hall = box(g, 34, 10, 26, 0xefe8d8, 60, 5, 4);
-        const dome = new THREE.Mesh(new THREE.SphereGeometry(10, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), lambert(0x3e7f5b));
-        dome.position.set(60, 10, 4); g.add(dome);
-        cyl(g, 1.6, 2.1, 34, 0xf4eee0, 42, 17, -8, 10);
-        const cap = new THREE.Mesh(new THREE.ConeGeometry(2.4, 5, 10), lambert(0x3e7f5b));
-        cap.position.set(42, 36.5, -8); g.add(cap);
-        addCol(36, 28, 60, 4);
-        labelH = 52;
+        box(g, 44, 12, 34, 0xf3ede0, 62, 6, 4);                 // prayer hall
+        box(g, 46, 1.2, 36, 0xe3dbc8, 62, 12.4, 4);
+        const drum = cyl(g, 11, 12, 4, 0xf3ede0, 62, 14, 4, 18);
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(11, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), lambert(0x4d8a68));
+        dome.position.set(62, 16, 4); g.add(dome);
+        for (const mz of [-16, 24]) {                            // twin minarets
+          cyl(g, 1.5, 1.9, 40, 0xf6f1e4, 40, 20, mz, 10);
+          cyl(g, 2.3, 2.3, 1.4, 0xe3dbc8, 40, 27, mz, 10);       // balcony
+          cyl(g, 2.3, 2.3, 1.4, 0xe3dbc8, 40, 35, mz, 10);
+          const cap = new THREE.Mesh(new THREE.ConeGeometry(2.1, 5.5, 10), lambert(0x4d8a68));
+          cap.position.set(40, 42.5, mz); g.add(cap);
+        }
+        addCol(46, 36, 62, 4);
+        labelH = 56;
         break;
       }
       case 'mall': {
-        box(g, 130, 17, 62, 0xd7cfc2, 0, 8.5, 0);
+        // per-mall styling: Mazi = blue glass + red sign; others beige
+        const isMazi = lm.id === 'mazi';
+        const bodyColor = isMazi ? 0x6fa8cf : 0xd7cfc2;
+        const body = box(g, 130, 17, 62, bodyColor, 0, 8.5, 0);
+        if (isMazi) body.material = new THREE.MeshPhongMaterial({ color: 0x5f9cc8, shininess: 90, specular: 0xbfd8ea });
         box(g, 130, 3.2, 62, 0x8f8a80, 0, 18.6, 0);
-        box(g, 100, 10, 2, 0x77b7d9, 0, 6, 32);                 // glass front
-        box(g, 46, 7, 1.6, 0xb03a2e, 0, 23, 6);
+        box(g, 100, 10, 2, isMazi ? 0x9cc4e0 : 0x77b7d9, 0, 6, 32);   // glass front
+        const signText = lm.id === 'mazi' ? 'MAZI MALL' : lm.id === 'family' ? 'FAMILY MALL' : 'DUHOK MALL';
+        const sign = makeSign(signText, isMazi ? '#c8102e' : '#b03a2e', '#ffffff', 52, 8);
+        sign.position.set(0, 24.5, 4); g.add(sign);
+        const sign2 = makeSign(signText, isMazi ? '#c8102e' : '#b03a2e', '#ffffff', 30, 5);
+        sign2.position.set(0, 12, 33.5); g.add(sign2);
         addCol(132, 64);
         labelH = 42;
         break;
       }
       case 'dream': {
+        // gated villa community: cream villas, terracotta roofs, grand arch
         for (let rx = 0; rx < 5; rx++) {
           for (let rz = 0; rz < 3; rz++) {
             const x = -90 + rx * 45, z = -50 + rz * 48;
@@ -642,9 +756,12 @@ const WORLD = (() => {
             addCol(15, 13, x, z);
           }
         }
-        box(g, 4, 15, 4, 0xd8cbb4, -20, 7.5, 92);
-        box(g, 4, 15, 4, 0xd8cbb4, 20, 7.5, 92);
-        box(g, 48, 4, 5, 0xc27b46, 0, 17, 92);
+        box(g, 5, 16, 5, 0xd8cbb4, -21, 8, 92);
+        box(g, 5, 16, 5, 0xd8cbb4, 21, 8, 92);
+        box(g, 50, 5, 6, 0xc9a86a, 0, 18.5, 92);
+        const dsign = makeSign('DREAM CITY', '#20456e', '#ffe9b0', 40, 4.2);
+        dsign.position.set(0, 18.5, 95.3); g.add(dsign);
+        addCol(6, 6, -21, 92); addCol(6, 6, 21, 92);
         labelH = 48;
         break;
       }
@@ -738,6 +855,24 @@ const WORLD = (() => {
       scene.add(grp);
     }
 
+    // real neighbourhood / area name labels floating over their centres
+    const placeSprites = [];
+    for (const pl of city.places || []) {
+      const sp = makePlaceLabel(pl.name);
+      sp.position.set(pl.x, heightAt(pl.x, pl.z) + 34, pl.z);
+      placeSprites.push(sp);
+      scene.add(sp);
+    }
+
+    // the giant Kurdistan flag on the White Mountain slope above the city
+    {
+      const fx = -400, fz = -4150;
+      const flag = makeKurdistanFlag(260, 160);
+      flag.position.set(fx, rawHeight(fx, fz) + 20, fz);
+      flag.rotation.x = -0.42;         // leant back against the slope
+      scene.add(flag);
+    }
+
     buildTrees(scene, city, heightAt, roadIndex);
 
     return {
@@ -752,6 +887,7 @@ const WORLD = (() => {
         const cls = OSM.ROAD_CLASSES[r.cls] || OSM.ROAD_CLASSES.residential;
         return { d: hit.d, road: r, halfW: cls.w / 2, name: r.name };
       },
+      places: city.places || [],
       update(dt, px, pz) {
         for (const grp of landmarkGroups) {
           if (grp.userData.wheel) grp.userData.wheel.rotation.z += dt * 0.15;
@@ -764,6 +900,16 @@ const WORLD = (() => {
             const op = near * far;
             label.material.opacity = op;
             label.visible = op > 0.02;
+          }
+        }
+        if (px !== undefined) {
+          for (const sp of placeSprites) {
+            const d = Math.hypot(sp.position.x - px, sp.position.z - pz);
+            const near = Math.min(1, Math.max(0, (d - 130) / 90));
+            const far = Math.min(1, Math.max(0, (2600 - d) / 600));
+            const op = near * far * 0.95;
+            sp.material.opacity = op;
+            sp.visible = op > 0.02;
           }
         }
       },

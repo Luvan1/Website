@@ -51,6 +51,9 @@
     color: #e8ecf4; background: rgba(10,14,22,.55); padding: 6px 16px; border-radius: 20px;
     max-width: 60vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   #roadname:empty { display: none; }
+  #hint { left: 50%; transform: translateX(-50%); bottom: 58px; font-size: 14px;
+    color: #ffe9b0; background: rgba(12,16,26,.6); padding: 5px 14px; border-radius: 16px; }
+  #hint:empty { display: none; }
   #minimap { left: 18px; bottom: 18px; position: fixed; z-index: 10; border-radius: 50%;
     box-shadow: 0 4px 18px rgba(0,0,0,.5); border: 2px solid rgba(255,255,255,.18); }
   #toast { top: 8vh; left: 50%; transform: translateX(-50%) translateY(-12px); opacity: 0;
@@ -78,6 +81,8 @@
   #t-right { left: 118px; bottom: 130px; }
   #t-brake { right: 110px; bottom: 130px; background: rgba(220,80,80,.25); }
   #t-gas { right: 22px; bottom: 130px; background: rgba(90,200,120,.25); }
+  #t-use { right: 22px; bottom: 224px; width: 60px; height: 60px; font-size: 15px;
+    background: rgba(255,215,94,.22); }
 </style>
 </head>
 <body>
@@ -91,6 +96,7 @@
     <div id="load-row"><span class="spin"></span><span id="load-status">Loading…</span><button id="skipbtn">skip — play with offline map</button></div>
     <div class="kv">
       <div><b>Drive</b> W A S D &nbsp;or&nbsp; arrow keys</div>
+      <div><b>Get out / in</b> F — explore landmarks on foot (Shift = run)</div>
       <div><b>Handbrake</b> Space &nbsp;&nbsp;<b>Horn</b> H</div>
       <div><b>Camera</b> C &nbsp;&nbsp;<b>City map</b> M &nbsp;&nbsp;<b>Reset to road</b> R</div>
     </div><br>
@@ -102,9 +108,10 @@
 
 <div id="speedo" class="hud"><div id="speed">0</div><small>KM/H</small></div>
 <div id="roadname" class="hud"></div>
+<div id="hint" class="hud"></div>
 <div id="toast" class="hud"></div>
 <div id="help" class="hud">
-  <b>C</b> camera &nbsp; <b>M</b> map &nbsp; <b>R</b> reset &nbsp; <b>H</b> horn
+  <b>F</b> out/in &nbsp; <b>C</b> camera &nbsp; <b>M</b> map &nbsp; <b>R</b> reset &nbsp; <b>H</b> horn
   <div style="font-size:10px;color:#8b98b0">map data © OpenStreetMap contributors</div>
 </div>
 <canvas id="minimap" width="230" height="230"></canvas>
@@ -119,6 +126,7 @@
   <div class="tbtn" id="t-right">▶</div>
   <div class="tbtn" id="t-brake">▼</div>
   <div class="tbtn" id="t-gas">▲</div>
+  <div class="tbtn" id="t-use">🚶/🚙</div>
 </div>
 
 <script src="three.min.js"></script>

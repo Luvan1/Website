@@ -15,8 +15,9 @@ your desktop.
 
 - On first load the game downloads the **genuine street network of Duhok from
   OpenStreetMap** (via the Overpass API) straight into your browser: every
-  road, the dam lake, parks, rivers and real building footprints, all at their
-  true positions and sizes. The download is a few MB and is then cached in
+  road down to campus and mall service lanes, the real neighbourhood names
+  (shown in the HUD and floating over each district), the dam lake, parks,
+  rivers and real building footprints, all at their true positions and sizes. The download is a few MB and is then cached in
   your browser (IndexedDB), so later visits start instantly.
 - Use the *"re-download the latest map data"* link on the start screen to
   refresh the cache after OpenStreetMap improves its coverage of Duhok.
@@ -34,7 +35,9 @@ close approximations. Their 3D models are stylised, not photorealistic.
 
 | Key | Action |
 | --- | --- |
-| W A S D / arrows | drive |
+| W A S D / arrows | drive (or walk, when on foot) |
+| F (or E) | get out of / into the Escalade — explore landmarks on foot |
+| Shift | run while on foot |
 | Space | handbrake |
 | C | camera (chase / close / hood) |
 | M | full city map |
