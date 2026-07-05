@@ -59,8 +59,10 @@ const WORLD = (() => {
   function makeBoxHash(cell) {
     const map = new Map();
     const boxes = [];
-    function addBox(x0, z0, x1, z1) {
-      const b = { x0, z0, x1, z1 };
+    // poly (optional, flat [x,z,...]) enables exact footprint collision so
+    // rotated buildings don't produce invisible walls at their AABB corners
+    function addBox(x0, z0, x1, z1, poly) {
+      const b = { x0, z0, x1, z1, poly: poly || null };
       boxes.push(b);
       for (let cx = Math.floor(x0 / cell); cx <= Math.floor(x1 / cell); cx++) {
         for (let cz = Math.floor(z0 / cell); cz <= Math.floor(z1 / cell); cz++) {
@@ -81,7 +83,56 @@ const WORLD = (() => {
       }
       return out;
     }
-    return { addBox, query, boxes };
+    // Push a circle at (px,pz) out of every solid it overlaps.
+    // Returns {x,z} displacement or null if free.
+    function resolveCircle(px, pz, r) {
+      let ox = 0, oz = 0, hit = false;
+      for (const b of query(px, pz, r + 1)) {
+        if (px + ox < b.x0 - r || px + ox > b.x1 + r ||
+            pz + oz < b.z0 - r || pz + oz > b.z1 + r) continue;
+        if (b.poly) {
+          const push = circleVsPoly(px + ox, pz + oz, r, b.poly);
+          if (push) { ox += push.x; oz += push.z; hit = true; }
+        } else {
+          const nx = Math.min(Math.max(px + ox, b.x0), b.x1);
+          const nz = Math.min(Math.max(pz + oz, b.z0), b.z1);
+          const dx = px + ox - nx, dz = pz + oz - nz;
+          const d2 = dx * dx + dz * dz;
+          if (d2 >= r * r) continue;
+          const d = Math.sqrt(d2) || 0.001;
+          ox += (dx / d) * (r - d); oz += (dz / d) * (r - d);
+          hit = true;
+        }
+      }
+      return hit ? { x: ox, z: oz } : null;
+    }
+    return { addBox, query, resolveCircle, boxes };
+  }
+
+  function circleVsPoly(px, pz, r, poly) {
+    // nearest point on the polygon boundary
+    const n = poly.length / 2;
+    let bestD2 = Infinity, bx = 0, bz = 0;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const ax = poly[j * 2], az = poly[j * 2 + 1];
+      const cx = poly[i * 2], cz = poly[i * 2 + 1];
+      const dx = cx - ax, dz = cz - az;
+      const len2 = dx * dx + dz * dz || 1e-9;
+      let t = ((px - ax) * dx + (pz - az) * dz) / len2;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const qx = ax + dx * t, qz = az + dz * t;
+      const d2 = (px - qx) * (px - qx) + (pz - qz) * (pz - qz);
+      if (d2 < bestD2) { bestD2 = d2; bx = qx; bz = qz; }
+    }
+    const inside = pointInPoly(px, pz, poly);
+    const d = Math.sqrt(bestD2) || 0.001;
+    if (!inside && d >= r) return null;
+    // push away from the boundary (or out through it when inside)
+    const nx = (px - bx) / d, nz = (pz - bz) / d;
+    const depth = inside ? d + r : r - d;
+    return inside
+      ? { x: -nx * depth, z: -nz * depth }
+      : { x: nx * depth, z: nz * depth };
   }
 
   const _rng = (seed => () => {
@@ -98,14 +149,22 @@ const WORLD = (() => {
   function rawHeight(x, z) {
     const smooth = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
     let h = 0;
-    // Bêxêr ridge (north — pale rock)
+    // Bêxêr / White Mountain ridge (north) with a higher back range
     const n = smooth((-z - 3200) / 2100);
-    h += 360 * n * (0.82 + 0.18 * Math.sin(x * 0.00071 + 1.4) + 0.07 * Math.sin(x * 0.0023));
+    h += 420 * n * (0.80 + 0.20 * Math.sin(x * 0.00071 + 1.4) + 0.08 * Math.sin(x * 0.0023) + 0.05 * Math.sin(x * 0.0051));
+    const n2 = smooth((-z - 5600) / 2400);
+    h += 260 * n2 * (0.85 + 0.15 * Math.sin(x * 0.00055 + 0.7));
     // Zawa ridge (south) with the gorge cut at the Mosul road
     let s = smooth((z - 2300) / 2100);
     const gorge = Math.exp(-((x + 620) * (x + 620)) / (2 * 260 * 260));
     s *= (1 - 0.93 * gorge);
-    h += 320 * s * (0.85 + 0.15 * Math.sin(x * 0.00082 + 0.4));
+    h += 360 * s * (0.82 + 0.18 * Math.sin(x * 0.00082 + 0.4) + 0.06 * Math.sin(x * 0.0034));
+    // eastern highlands — the valley narrows towards Zawita
+    const e = smooth((x - 5300) / 2600);
+    h += 340 * e * (0.8 + 0.2 * Math.sin(z * 0.0008 + 1.1) + 0.07 * Math.sin(z * 0.0029));
+    // low hills closing the western horizon towards Semel
+    const w = smooth((-x - 8200) / 2600);
+    h += 160 * w * (0.85 + 0.15 * Math.sin(z * 0.001));
     // Dam lake bowl (raised ground holding the reservoir)
     const dx = (x - 1250) / 850, dz = (z + 2560) / 640;
     h += 26 * Math.exp(-(dx * dx + dz * dz) / 2);
@@ -188,7 +247,8 @@ const WORLD = (() => {
     MAT.vcBasic = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
     MAT.terrain = new THREE.MeshLambertMaterial({ vertexColors: true, map: makeGroundTex() });
     MAT.road = new THREE.MeshBasicMaterial({ vertexColors: true, map: makeAsphaltTex(), side: THREE.DoubleSide });
-    MAT.walls = new THREE.MeshBasicMaterial({ vertexColors: true, map: makeWindowsTex(), side: THREE.DoubleSide });
+    // real lighting on the buildings gives the city depth
+    MAT.walls = new THREE.MeshLambertMaterial({ vertexColors: true, map: makeWindowsTex(), side: THREE.DoubleSide });
   }
 
   /* --------------------------- geometry helpers ------------------------- */
@@ -206,7 +266,7 @@ const WORLD = (() => {
     if (acc.uv.length * 3 === acc.pos.length * 2) {
       g.setAttribute('uv', new THREE.Float32BufferAttribute(acc.uv, 2));
     }
-    if (material === MAT.vcLambert) g.computeVertexNormals();
+    if (material.isMeshLambertMaterial) g.computeVertexNormals();
     const m = new THREE.Mesh(g, material);
     m.matrixAutoUpdate = false;
     return m;
@@ -363,7 +423,7 @@ const WORLD = (() => {
   }
 
   function buildTerrain(scene, heightAt, waterInfos) {
-    const W = 20000, H = 15000, SX = 170, SZ = 128;
+    const W = 24000, H = 17000, SX = 200, SZ = 142;
     const geo = new THREE.PlaneGeometry(W, H, SX, SZ);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
@@ -459,14 +519,16 @@ const WORLD = (() => {
     [0.88, 0.85, 0.78], [0.73, 0.68, 0.58], [0.84, 0.78, 0.62],
   ].map(lin);
 
-  function buildRealBuildings(scene, buildings, colHash) {
-    // sun-baked shading baked into vertex colours (basic material, no lights)
+  function buildRealBuildings(scene, buildings, colHash, roofSpots) {
+    // gentle baked sun tint on top of real Lambert lighting
     const sunX = 0.55, sunZ = -0.35;
+    const doorCol = [0.13, 0.10, 0.08];
     let acc = makeAcc(), inChunk = 0;
     const flush = () => {
       if (acc.pos.length) scene.add(accToMesh(acc, MAT.walls));
       acc = makeAcc(); inChunk = 0;
     };
+    let bi = 0;
     for (const b of buildings) {
       const poly = b.pts;
       const n = poly.length / 2;
@@ -474,30 +536,91 @@ const WORLD = (() => {
       const base = BUILDING_PALETTE[(Math.floor(poly[0] * 13.7) & 1048575) % BUILDING_PALETTE.length];
       const h = b.h;
       // walls (window texture repeats every ~10 m / 3 floors)
+      let doorWall = null, doorLen = 0;
       for (let i = 0; i < n; i++) {
         const j = (i + 1) % n;
         const ax = poly[i * 2], az = poly[i * 2 + 1];
         const bx = poly[j * 2], bz = poly[j * 2 + 1];
         let nx = az - bz, nz = bx - ax;
         const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;
-        const lum = 0.62 + 0.34 * Math.max(0, nx * sunX + nz * sunZ);
+        const lum = 0.84 + 0.16 * Math.max(0, nx * sunX + nz * sunZ);
         const col = [base[0] * lum, base[1] * lum, base[2] * lum];
         const wl = Math.hypot(bx - ax, bz - az);
         const u1 = Math.max(0.35, wl / 10), v1 = Math.max(0.4, h / 9.5);
         pushQuad(acc, [ax, 0, az], [bx, 0, bz], [bx, h, bz], [ax, h, az], col,
           [[0, 0], [u1, 0], [u1, v1], [0, v1]]);
+        if (wl > doorLen) { doorLen = wl; doorWall = { ax, az, bx, bz, nx, nz }; }
       }
-      // roof (samples the plain corner of the window tile)
+      // door on the longest wall
+      if (doorWall && doorLen > 4) {
+        const { ax, az, bx, bz, nx, nz } = doorWall;
+        const mx = (ax + bx) / 2, mz = (az + bz) / 2;
+        const ux = (bx - ax) / doorLen, uz = (bz - az) / doorLen;
+        const dw = 0.7, dh = 2.3, off = 0.06;
+        pushQuad(acc,
+          [mx - ux * dw + nx * off, 0, mz - uz * dw + nz * off],
+          [mx + ux * dw + nx * off, 0, mz + uz * dw + nz * off],
+          [mx + ux * dw + nx * off, dh, mz + uz * dw + nz * off],
+          [mx - ux * dw + nx * off, dh, mz - uz * dw + nz * off],
+          doorCol, [[0.02, 0.02], [0.02, 0.02], [0.02, 0.02], [0.02, 0.02]]);
+      }
+      // roof (samples the plain corner of the window tile) + parapet lip
       pushPolygon(acc, poly, h, [base[0] * 0.55, base[1] * 0.55, base[2] * 0.55], [0.02, 0.02]);
-      // collision (AABB is a fair fit for typical houses)
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        pushQuad(acc,
+          [poly[i * 2], h, poly[i * 2 + 1]], [poly[j * 2], h, poly[j * 2 + 1]],
+          [poly[j * 2], h + 0.5, poly[j * 2 + 1]], [poly[i * 2], h + 0.5, poly[i * 2 + 1]],
+          [base[0] * 0.7, base[1] * 0.7, base[2] * 0.7],
+          [[0.02, 0.02], [0.02, 0.02], [0.02, 0.02], [0.02, 0.02]]);
+      }
+      // rooftop clutter spot (water tanks & dishes are everywhere in Duhok)
       const bb = polyBounds(poly);
-      if (bb.x1 - bb.x0 < 120 && bb.z1 - bb.z0 < 120) colHash.addBox(bb.x0, bb.z0, bb.x1, bb.z1);
-      if (++inChunk >= 700) flush();
+      if (bi % 3 !== 2 && roofSpots.length < 9000) {
+        const cx = (bb.x0 + bb.x1) / 2, cz = (bb.z0 + bb.z1) / 2;
+        if (pointInPoly(cx, cz, poly)) roofSpots.push({ x: cx, z: cz, h, s: bi });
+      }
+      // exact-footprint collision (no invisible AABB corners)
+      if (bb.x1 - bb.x0 < 120 && bb.z1 - bb.z0 < 120) colHash.addBox(bb.x0, bb.z0, bb.x1, bb.z1, poly);
+      if (++inChunk >= 600) flush();
+      bi++;
     }
     flush();
   }
 
-  function buildProceduralBuildings(scene, roads, roadIndex, colHash, landGreens) {
+  function buildRoofClutter(scene, roofSpots) {
+    if (!roofSpots.length) return;
+    const tankGeo = new THREE.CylinderGeometry(0.62, 0.62, 1.25, 9);
+    tankGeo.translate(0, 0.62, 0);
+    const dishGeo = new THREE.CircleGeometry(0.5, 8);
+    dishGeo.rotateX(-Math.PI / 3);
+    dishGeo.translate(0, 0.7, 0);
+    const tanks = new THREE.InstancedMesh(tankGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), roofSpots.length);
+    const dishes = new THREE.InstancedMesh(dishGeo, new THREE.MeshLambertMaterial({ color: 0xd8dade, side: THREE.DoubleSide }), Math.ceil(roofSpots.length / 2));
+    const m4 = new THREE.Matrix4(), col = new THREE.Color();
+    let ti = 0, di = 0;
+    for (const sp of roofSpots) {
+      const jx = ((sp.s * 7919) % 100) / 100 - 0.5, jz = ((sp.s * 104729) % 100) / 100 - 0.5;
+      m4.makeRotationY(sp.s % 7);
+      m4.setPosition(sp.x + jx * 2.5, sp.h, sp.z + jz * 2.5);
+      tanks.setMatrixAt(ti, m4);
+      col.setHSL(0, 0, sp.s % 4 === 0 ? 0.18 : 0.85);   // some black tanks
+      tanks.setColorAt(ti, col);
+      ti++;
+      if (sp.s % 2 === 0 && di < dishes.count) {
+        m4.makeRotationY((sp.s % 11) * 0.6);
+        m4.setPosition(sp.x - jx * 3, sp.h, sp.z - jz * 3);
+        dishes.setMatrixAt(di, m4);
+        di++;
+      }
+    }
+    tanks.count = ti; dishes.count = di;
+    tanks.instanceMatrix.needsUpdate = dishes.instanceMatrix.needsUpdate = true;
+    if (tanks.instanceColor) tanks.instanceColor.needsUpdate = true;
+    scene.add(tanks); scene.add(dishes);
+  }
+
+  function buildProceduralBuildings(scene, roads, roadIndex, colHash, landGreens, roofSpots) {
     const geo = new THREE.BoxGeometry(1, 1, 1);
     geo.translate(0, 0.5, 0);
     const count = 6500;
@@ -532,7 +655,8 @@ const WORLD = (() => {
             const w = 7 + _rng() * 6, dep = 7 + _rng() * 6;
             let h = 3.6 + _rng() * 3.4;
             if (distC < 900) h = 6 + _rng() * 9;         // taller downtown
-            m4.makeRotationY(-Math.atan2(uz, ux));
+            const ang = -Math.atan2(uz, ux);
+            m4.makeRotationY(ang);
             m4.setPosition(cx, 0, cz);
             m4.elements[0] *= w; m4.elements[2] *= w;
             m4.elements[8] *= dep; m4.elements[10] *= dep;
@@ -541,7 +665,17 @@ const WORLD = (() => {
             const p = BUILDING_PALETTE[idx % BUILDING_PALETTE.length];
             col.setRGB(p[0], p[1], p[2]);
             mesh.setColorAt(idx, col);
-            colHash.addBox(cx - w / 2, cz - dep / 2, cx + w / 2, cz + dep / 2);
+            // exact rotated footprint for collision
+            const ca = Math.cos(ang), sa = Math.sin(ang);
+            const hw = w / 2, hd = dep / 2;
+            const corners = [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]];
+            const poly = [];
+            for (const [lx, lz] of corners) {
+              poly.push(cx + lx * ca + lz * sa, cz - lx * sa + lz * ca);
+            }
+            const bxs = [poly[0], poly[2], poly[4], poly[6]], bzs = [poly[1], poly[3], poly[5], poly[7]];
+            colHash.addBox(Math.min(...bxs), Math.min(...bzs), Math.max(...bxs), Math.max(...bzs), poly);
+            if (idx % 3 === 0 && roofSpots.length < 11000) roofSpots.push({ x: cx, z: cz, h, s: idx });
             idx++;
           }
         }
@@ -728,9 +862,11 @@ const WORLD = (() => {
         const ssign = makeSign('DUHOK STADIUM', '#1c3f7a', '#ffffff', 44, 5.5);
         ssign.position.set(0, 23, 118);                  // over the entrance
         g.add(ssign);
-        // ring collision approximated with four boxes
-        addCol(270, 40, 0, -100); addCol(270, 40, 0, 100);
-        addCol(40, 200, -125, 0); addCol(40, 200, 125, 0);
+        // collision ring hugging the actual bowl (no invisible corners)
+        for (let i = 0; i < 14; i++) {
+          const a = i / 14 * Math.PI * 2;
+          addCol(34, 34, Math.cos(a) * 127, Math.sin(a) * 102);
+        }
         labelH = 60;
         break;
       }
@@ -1016,11 +1152,13 @@ const WORLD = (() => {
     buildRoads(scene, city.roads);
     buildWaterAndGreens(scene, city, waterInfos);
 
+    const roofSpots = [];
     if (city.buildings && city.buildings.length > 400) {
-      buildRealBuildings(scene, city.buildings, colHash);
+      buildRealBuildings(scene, city.buildings, colHash, roofSpots);
     } else {
-      buildProceduralBuildings(scene, city.roads, roadIndex, colHash, city.greens || []);
+      buildProceduralBuildings(scene, city.roads, roadIndex, colHash, city.greens || [], roofSpots);
     }
+    buildRoofClutter(scene, roofSpots);
 
     const landmarkGroups = [];
     for (const lm of OSM.LANDMARKS) {

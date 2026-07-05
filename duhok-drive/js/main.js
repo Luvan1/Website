@@ -30,8 +30,8 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     renderer.setSize(window.innerWidth, window.innerHeight);
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xbfd6ea);
-    scene.fog = new THREE.Fog(0xc4d4e0, 900, 4200);
-    camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.3, 9000);
+    scene.fog = new THREE.Fog(0xc4d4e0, 1300, 6500);
+    camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.3, 15000);
     addLights();
 
     window.addEventListener('resize', () => {
@@ -103,34 +103,24 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       offroad: false,
       camMode: 0, camPos: new THREE.Vector3(0, 6, -12), shake: 0,
     };
-    // spawn on a MAIN road (trunk/primary) near the city centre, in the
-    // right-hand lane
-    const centre = OSM.project(36.8585, 42.9930);
-    let best = null, bestD2 = Infinity;
-    for (const r of city.roads) {
-      const cls = OSM.ROAD_CLASSES[r.cls] || OSM.ROAD_CLASSES.residential;
-      if (cls.rank > 1) continue;                       // main roads only
-      const p = r.pts;
-      for (let i = 0; i < p.length / 2 - 1; i++) {
-        const mx = (p[i * 2] + p[i * 2 + 2]) / 2, mz = (p[i * 2 + 1] + p[i * 2 + 3]) / 2;
-        const d2 = (mx - centre.x) ** 2 + (mz - centre.z) ** 2;
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          best = { ax: p[i * 2], az: p[i * 2 + 1], bx: p[i * 2 + 2], bz: p[i * 2 + 3], cls };
-        }
-      }
-    }
-    if (!best) {
-      const hit = world.roadIndex.nearest(centre.x, centre.z, 1500);
-      if (hit) best = { ...hit.seg, ax: hit.seg.ax, az: hit.seg.az, bx: hit.seg.bx, bz: hit.seg.bz,
+    // fixed spawn point (requested): 36.86353, 42.94955 — snapped to the
+    // nearest road, in the right-hand lane
+    const centre = OSM.project(36.86353, 42.94955);
+    let best = null;
+    const hit = world.roadIndex.nearest(centre.x, centre.z, 2000);
+    if (hit) {
+      best = { ax: hit.seg.ax, az: hit.seg.az, bx: hit.seg.bx, bz: hit.seg.bz,
         cls: OSM.ROAD_CLASSES[hit.seg.data.cls] || OSM.ROAD_CLASSES.residential };
     }
     if (best) {
       let ux = best.bx - best.ax, uz = best.bz - best.az;
       const len = Math.hypot(ux, uz) || 1; ux /= len; uz /= len;
+      // closest point of the road to the requested spawn coordinate
+      let t = ((centre.x - best.ax) * ux + (centre.z - best.az) * uz) / len;
+      t = clamp(t, 0, 1);
       const lane = best.cls.dual ? best.cls.w * 0.27 : best.cls.w * 0.23;
-      player.x = (best.ax + best.bx) / 2 - uz * lane;   // right of travel dir
-      player.z = (best.az + best.bz) / 2 + ux * lane;
+      player.x = best.ax + (best.bx - best.ax) * t - uz * lane;   // right of travel dir
+      player.z = best.az + (best.bz - best.az) * t + ux * lane;
       player.heading = Math.atan2(ux, uz);
     } else {
       player.x = centre.x; player.z = centre.z;
@@ -201,16 +191,10 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     p.z += fz * p.v * dt;
     p.speed = Math.abs(p.v);
 
-    // collisions: buildings/landmarks
+    // collisions: buildings/landmarks (exact footprints)
     const r = 0.42;
-    for (const b of world.collisions.query(p.x, p.z, r + 1)) {
-      const nx = clamp(p.x, b.x0, b.x1), nz = clamp(p.z, b.z0, b.z1);
-      const dx = p.x - nx, dz = p.z - nz;
-      const d2 = dx * dx + dz * dz;
-      if (d2 >= r * r) continue;
-      const d = Math.sqrt(d2) || 0.001;
-      p.x += (dx / d) * (r - d); p.z += (dz / d) * (r - d);
-    }
+    const wpush = world.collisions.resolveCircle(p.x, p.z, r);
+    if (wpush) { p.x += wpush.x; p.z += wpush.z; }
     // collisions: traffic cars and the parked Escalade
     const solids = [];
     for (const car of traffic.cars) {
@@ -299,18 +283,12 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     p.z += Math.cos(p.heading) * p.v * dt;
     p.speed = Math.abs(p.v);
 
-    // --- collisions with buildings / landmarks
+    // --- collisions with buildings / landmarks (exact footprints)
     const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
     for (const [ox, oz] of [[fx * 1.6, fz * 1.6], [-fx * 1.6, -fz * 1.6]]) {
-      const cx = p.x + ox, cz = p.z + oz, r = 1.12;
-      for (const b of world.collisions.query(cx, cz, r + 1)) {
-        const nx = clamp(cx, b.x0, b.x1), nz = clamp(cz, b.z0, b.z1);
-        const dx = cx - nx, dz = cz - nz;
-        const d2 = dx * dx + dz * dz;
-        if (d2 >= r * r) continue;
-        const d = Math.sqrt(d2) || 0.001;
-        const push = (r - d);
-        p.x += (dx / d) * push; p.z += (dz / d) * push;
+      const push = world.collisions.resolveCircle(p.x + ox, p.z + oz, 1.12);
+      if (push) {
+        p.x += push.x; p.z += push.z;
         if (Math.abs(p.v) > 8) { audio && audio.crash(); p.shake = 0.5; }
         else if (Math.abs(p.v) > 2) p.shake = 0.2;
         p.v *= 0.35;
