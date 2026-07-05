@@ -2491,16 +2491,35 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       offroad: false,
       camMode: 0, camPos: new THREE.Vector3(0, 6, -12), shake: 0,
     };
-    // spawn on a road near the Grand Bazaar (city centre)
+    // spawn on a MAIN road (trunk/primary) near the city centre, in the
+    // right-hand lane
     const centre = OSM.project(36.8585, 42.9930);
-    const near = world.nearestRoad(centre.x, centre.z, 800);
-    if (near) {
-      // put the car on the actual road line
-      const hit = world.roadIndex.nearest(centre.x, centre.z, 800);
-      const s = hit.seg;
-      player.x = (s.ax + s.bx) / 2;
-      player.z = (s.az + s.bz) / 2;
-      player.heading = Math.atan2(s.bx - s.ax, s.bz - s.az);
+    let best = null, bestD2 = Infinity;
+    for (const r of city.roads) {
+      const cls = OSM.ROAD_CLASSES[r.cls] || OSM.ROAD_CLASSES.residential;
+      if (cls.rank > 1) continue;                       // main roads only
+      const p = r.pts;
+      for (let i = 0; i < p.length / 2 - 1; i++) {
+        const mx = (p[i * 2] + p[i * 2 + 2]) / 2, mz = (p[i * 2 + 1] + p[i * 2 + 3]) / 2;
+        const d2 = (mx - centre.x) ** 2 + (mz - centre.z) ** 2;
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          best = { ax: p[i * 2], az: p[i * 2 + 1], bx: p[i * 2 + 2], bz: p[i * 2 + 3], cls };
+        }
+      }
+    }
+    if (!best) {
+      const hit = world.roadIndex.nearest(centre.x, centre.z, 1500);
+      if (hit) best = { ...hit.seg, ax: hit.seg.ax, az: hit.seg.az, bx: hit.seg.bx, bz: hit.seg.bz,
+        cls: OSM.ROAD_CLASSES[hit.seg.data.cls] || OSM.ROAD_CLASSES.residential };
+    }
+    if (best) {
+      let ux = best.bx - best.ax, uz = best.bz - best.az;
+      const len = Math.hypot(ux, uz) || 1; ux /= len; uz /= len;
+      const lane = best.cls.dual ? best.cls.w * 0.27 : best.cls.w * 0.23;
+      player.x = (best.ax + best.bx) / 2 - uz * lane;   // right of travel dir
+      player.z = (best.az + best.bz) / 2 + ux * lane;
+      player.heading = Math.atan2(ux, uz);
     } else {
       player.x = centre.x; player.z = centre.z;
     }
