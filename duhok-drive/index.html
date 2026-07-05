@@ -53,7 +53,8 @@
     max-width: 60vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   #roadname:empty { display: none; }
   #hint { left: 50%; transform: translateX(-50%); bottom: 58px; font-size: 14px;
-    color: #ffe9b0; background: rgba(12,16,26,.6); padding: 5px 14px; border-radius: 16px; }
+    color: #ffe9b0; background: rgba(12,16,26,.6); padding: 5px 14px; border-radius: 16px;
+    pointer-events: auto; cursor: pointer; }
   #hint:empty { display: none; }
   #minimap { left: 18px; bottom: 18px; position: fixed; z-index: 10; border-radius: 50%;
     box-shadow: 0 4px 18px rgba(0,0,0,.5); border: 2px solid rgba(255,255,255,.18); }
@@ -217,6 +218,8 @@ const OSM = (() => {
     { id: 'dmall',    name: 'Duhok Mall',              lat: 36.8710, lon: 42.9600, verified: false, kind: 'mall' },
     { id: 'dream',    name: 'Dream City',              lat: 36.8630, lon: 42.9300, verified: false, kind: 'dream' },
     { id: 'gali',     name: 'Gali Duhok Gorge',        lat: 36.8380, lon: 42.9890, verified: false, kind: 'gorge' },
+    // added from the player's photo — exact spot provided
+    { id: 'vtkiosk',  name: 'VT Coffee Kiosk',         lat: 36.86667, lon: 42.95858, verified: true, kind: 'kiosk' },
   ];
 
   /* Road class table: rendered width (m), AI speed limit (km/h), dual carriageway */
@@ -1307,6 +1310,25 @@ const WORLD = (() => {
     scene.add(accToMesh(gAcc, MAT.vcBasic));
   }
 
+  // keep generated/real filler buildings out of the landmark sites
+  const LANDMARK_CLEAR_R = {
+    dam: 360, stadium: 175, university: 120, park: 130, bazaar: 115,
+    mall: 95, dream: 140, gorge: 30, kiosk: 26,
+  };
+  function landmarkClearZones() {
+    return OSM.LANDMARKS.map(lm => {
+      const q = OSM.project(lm.lat, lm.lon);
+      return { x: q.x, z: q.z, r: LANDMARK_CLEAR_R[lm.kind] || 60 };
+    });
+  }
+  function inClearZone(zones, x, z) {
+    for (const zn of zones) {
+      const dx = x - zn.x, dz = z - zn.z;
+      if (dx * dx + dz * dz < zn.r * zn.r) return true;
+    }
+    return false;
+  }
+
   const BUILDING_PALETTE = [
     [0.82, 0.76, 0.65], [0.86, 0.82, 0.72], [0.78, 0.72, 0.6],
     [0.88, 0.85, 0.78], [0.73, 0.68, 0.58], [0.84, 0.78, 0.62],
@@ -1321,11 +1343,14 @@ const WORLD = (() => {
       if (acc.pos.length) scene.add(accToMesh(acc, MAT.walls));
       acc = makeAcc(); inChunk = 0;
     };
+    // only the tiny custom sites (kiosk) displace real mapped buildings
+    const kioskZones = landmarkClearZones().filter(z => z.r <= 30);
     let bi = 0;
     for (const b of buildings) {
       const poly = b.pts;
       const n = poly.length / 2;
       if (n < 3) continue;
+      if (kioskZones.length && inClearZone(kioskZones, poly[0], poly[1])) continue;
       const base = BUILDING_PALETTE[(Math.floor(poly[0] * 13.7) & 1048575) % BUILDING_PALETTE.length];
       const h = b.h;
       // walls (window texture repeats every ~10 m / 3 floors)
@@ -1421,6 +1446,7 @@ const WORLD = (() => {
       new THREE.MeshLambertMaterial({ color: 0xffffff, map: makeWindowsTex() }), count);
     const m4 = new THREE.Matrix4(), col = new THREE.Color();
     let idx = 0;
+    const clearZones = landmarkClearZones();
     const centre = OSM.project(36.8585, 42.9930);      // bazaar = downtown
     for (const r of roads) {
       if (idx >= count) break;
@@ -1438,9 +1464,10 @@ const WORLD = (() => {
             const off = cls.w / 2 + 5 + _rng() * 5;
             const cx = ax + ux * d - uz * off * side;
             const cz = az + uz * d + ux * off * side;
-            // keep clear of other roads and parks
+            // keep clear of other roads, parks and landmark sites
             const near = roadIndex.nearest(cx, cz, 30);
             if (near && near.d < cls.w / 2 + 3.5) continue;
+            if (inClearZone(clearZones, cx, cz)) continue;
             let inPark = false;
             for (const g of landGreens) { if (pointInPoly(cx, cz, g)) { inPark = true; break; } }
             if (inPark) continue;
@@ -1586,7 +1613,7 @@ const WORLD = (() => {
     return m;
   }
 
-  function buildLandmark(lm, colHash) {
+  function buildLandmark(lm, colHash, roadIndex) {
     const g = new THREE.Group();
     const p = OSM.project(lm.lat, lm.lon);
     g.position.set(p.x, 0, p.z);
@@ -1794,6 +1821,45 @@ const WORLD = (() => {
         labelH = 48;
         break;
       }
+      case 'kiosk': {
+        // small drive-up coffee kiosk, modelled from the player's photo:
+        // white stucco cube, olive wrap-around canopy, yellow VT sign band,
+        // dark service window, white planter pots, cones out front
+        box(g, 6.2, 3.1, 4.2, 0xf2efe8, 0, 1.55, 0);
+        box(g, 3.4, 1.5, 0.15, 0x20242a, 0.2, 1.9, 2.13);      // service window
+        box(g, 3.8, 0.12, 0.5, 0xd8cfc0, 0.2, 1.12, 2.3);      // counter ledge
+        const ksign = makeSign('VT · VIRGINIA TOBACCO', '#f2c31c', '#17181c', 4.6, 0.85);
+        ksign.position.set(0.2, 2.95, 2.28); g.add(ksign);
+        box(g, 8.6, 0.35, 6.2, 0xa9a53b, 0, 3.95, 0);          // canopy slab
+        box(g, 8.6, 1.15, 0.25, 0xa9a53b, 0, 3.45, 3.05);      // front fascia
+        box(g, 0.25, 1.15, 6.2, 0xa9a53b, -4.25, 3.45, 0);     // left fascia
+        box(g, 0.5, 3.95, 5.2, 0xa9a53b, 4.1, 1.97, 0);        // right wing to ground
+        for (const [px, pz] of [[-2.6, 2.6], [-1.8, 2.75], [1.9, 2.8], [2.6, 2.6], [3.1, 2.85]]) {
+          cyl(g, 0.28, 0.22, 0.5, 0xf5f5f2, px, 0.25, pz, 8);
+          const bush = new THREE.Mesh(new THREE.SphereGeometry(0.36, 8, 6), lambert(0x4d7a3a));
+          bush.position.set(px, 0.78, pz); g.add(bush);
+        }
+        const cone1 = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.62, 10), lambert(0xd9531e));
+        cone1.position.set(-0.6, 0.31, 4.8); g.add(cone1);
+        const cone2 = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.62, 10), lambert(0x22242a));
+        cone2.position.set(-2.2, 0.31, 4.5); g.add(cone2);
+        box(g, 0.7, 0.9, 0.06, 0x1c1e22, 3.5, 1.0, 3.4, 0.3);  // menu blackboard
+        // face the nearest street
+        if (roadIndex) {
+          const near = roadIndex.nearest(p.x, p.z, 60);
+          if (near) {
+            const s = near.seg;
+            const t = Math.max(0, Math.min(1,
+              ((p.x - s.ax) * (s.bx - s.ax) + (p.z - s.az) * (s.bz - s.az)) /
+              (((s.bx - s.ax) ** 2 + (s.bz - s.az) ** 2) || 1)));
+            const qx = s.ax + (s.bx - s.ax) * t, qz = s.az + (s.bz - s.az) * t;
+            g.rotation.y = Math.atan2(qx - p.x, qz - p.z);
+          }
+        }
+        addCol(9, 9);           // square cover regardless of rotation
+        labelH = 10;
+        break;
+      }
       case 'gorge': {
         // viewpoint sign only — the gorge itself is carved into the terrain
         cyl(g, 0.25, 0.25, 5, 0x888888, 0, 2.5, 0, 6);
@@ -1955,7 +2021,7 @@ const WORLD = (() => {
 
     const landmarkGroups = [];
     for (const lm of OSM.LANDMARKS) {
-      const grp = buildLandmark(lm, colHash);
+      const grp = buildLandmark(lm, colHash, roadIndex);
       landmarkGroups.push(grp);
       scene.add(grp);
     }
@@ -2289,7 +2355,19 @@ const VEHICLES = (() => {
       s.position.set(0, -0.82, 0.05);
       leg.add(s);
     }
-    return { group: g, limbs: { lArm, rArm, lLeg, rLeg } };
+    // takeaway coffee cup in the right hand (shown after buying at the kiosk)
+    const cup = new THREE.Group();
+    const cupBody = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.15, 10), bodyMat(0xf5f2ea));
+    cup.add(cupBody);
+    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.054, 0.048, 0.055, 10), bodyMat(0xa9853f));
+    cup.add(sleeve);
+    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.022, 10), bodyMat(0x5f4130));
+    lid.position.y = 0.085;
+    cup.add(lid);
+    cup.position.set(0, -0.62, 0.12);
+    cup.visible = false;
+    rArm.add(cup);
+    return { group: g, limbs: { lArm, rArm, lLeg, rLeg }, cup };
   }
 
   return { makeEscalade, makeTrafficCar, makePedestrian };
@@ -2809,6 +2887,7 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       if (e.code === 'KeyH') audio && audio.horn();
       if (e.code === 'KeyF' || e.code === 'KeyE') toggleWalkMode();
       if (e.code === 'KeyK') shareLocation();
+      if (e.code === 'KeyB') buyCoffee();
     });
     window.addEventListener('keyup', e => {
       const k = KEYMAP[e.code];
@@ -2826,6 +2905,12 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       bind('t-gas', 'fwd'); bind('t-brake', 'back');
       $('t-use').addEventListener('touchstart', e => { toggleWalkMode(); e.preventDefault(); }, { passive: false });
     }
+    // the contextual hint is tappable (coffee / get in)
+    $('hint').addEventListener('click', () => {
+      const t = $('hint').textContent;
+      if (t.includes('coffee')) buyCoffee();
+      else if (t.includes('Escalade')) toggleWalkMode();
+    });
   }
 
   /* ------------------------------- player ------------------------------- */
@@ -2899,6 +2984,25 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     }
   }
 
+  /* --------------------------- VT coffee kiosk --------------------------- */
+  const KIOSK = OSM.project(36.86667, 42.95858);
+  const COFFEE_MS = 25000;
+
+  function nearKiosk() {
+    return Math.hypot(player.x - KIOSK.x, player.z - KIOSK.z) < 10;
+  }
+  function buyCoffee() {
+    if (!player || !running) return;
+    if (player.mode !== 'walk') {
+      if (nearKiosk()) toast('Get out first (F) — the kiosk serves you on foot ☕');
+      return;
+    }
+    if (!nearKiosk()) { toast('Walk up to the VT kiosk window to order ☕'); return; }
+    player.coffeeUntil = performance.now() + COFFEE_MS;
+    player.ped.cup.visible = true;
+    toast('☕ One coffee from VT — enjoy!');
+  }
+
   function resetToRoad() {
     if (player.mode === 'walk') { toast('Get back in the car first (walk to it and press F)'); return; }
     const hit = world.roadIndex.nearest(player.x, player.z, 2500);
@@ -2970,7 +3074,11 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     p.walkPhase += p.speed * dt * 3.4;
     const swing = Math.sin(p.walkPhase) * Math.min(1, p.speed / 1.5) * 0.7;
     const L = p.ped.limbs;
-    L.lArm.rotation.x = swing; L.rArm.rotation.x = -swing;
+    // holding the coffee: right arm stays bent instead of swinging
+    const hasCoffee = performance.now() < (p.coffeeUntil || 0);
+    p.ped.cup.visible = hasCoffee;
+    L.lArm.rotation.x = swing;
+    L.rArm.rotation.x = hasCoffee ? -1.05 : -swing;
     L.lLeg.rotation.x = -swing; L.rLeg.rotation.x = swing;
     // tell the traffic AI about the parked car so nobody drives through it
     p.parked = p.carPos;
@@ -3302,7 +3410,11 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       // contextual hint when on foot next to the car
       if (player.mode === 'walk') {
         const d = Math.hypot(player.x - player.carPos.x, player.z - player.carPos.z);
-        $('hint').textContent = d < 4.5 ? 'Press F to get in the Escalade' : '';
+        const hasCoffee = performance.now() < (player.coffeeUntil || 0);
+        if (d < 4.5) $('hint').textContent = 'Press F to get in the Escalade';
+        else if (nearKiosk() && !hasCoffee) $('hint').textContent = 'Press B for a coffee ☕';
+        else if (hasCoffee) $('hint').textContent = '☕ ' + Math.ceil((player.coffeeUntil - performance.now()) / 1000) + 's';
+        else $('hint').textContent = '';
       } else {
         $('hint').textContent = '';
       }
@@ -3516,6 +3628,8 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       await OSM.clearCache();
       location.search = '?refresh=1';
     };
+
+    window.__DUHOK_W__ = () => ({ world, player, city });
 
     // debug/testing hook: teleport to a lat/lon facing a compass bearing
     // (0 = north, 90 = east), e.g. from the browser console.

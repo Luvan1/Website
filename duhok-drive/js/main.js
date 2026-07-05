@@ -66,6 +66,7 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       if (e.code === 'KeyH') audio && audio.horn();
       if (e.code === 'KeyF' || e.code === 'KeyE') toggleWalkMode();
       if (e.code === 'KeyK') shareLocation();
+      if (e.code === 'KeyB') buyCoffee();
     });
     window.addEventListener('keyup', e => {
       const k = KEYMAP[e.code];
@@ -83,6 +84,12 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       bind('t-gas', 'fwd'); bind('t-brake', 'back');
       $('t-use').addEventListener('touchstart', e => { toggleWalkMode(); e.preventDefault(); }, { passive: false });
     }
+    // the contextual hint is tappable (coffee / get in)
+    $('hint').addEventListener('click', () => {
+      const t = $('hint').textContent;
+      if (t.includes('coffee')) buyCoffee();
+      else if (t.includes('Escalade')) toggleWalkMode();
+    });
   }
 
   /* ------------------------------- player ------------------------------- */
@@ -156,6 +163,25 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     }
   }
 
+  /* --------------------------- VT coffee kiosk --------------------------- */
+  const KIOSK = OSM.project(36.86667, 42.95858);
+  const COFFEE_MS = 25000;
+
+  function nearKiosk() {
+    return Math.hypot(player.x - KIOSK.x, player.z - KIOSK.z) < 10;
+  }
+  function buyCoffee() {
+    if (!player || !running) return;
+    if (player.mode !== 'walk') {
+      if (nearKiosk()) toast('Get out first (F) — the kiosk serves you on foot ☕');
+      return;
+    }
+    if (!nearKiosk()) { toast('Walk up to the VT kiosk window to order ☕'); return; }
+    player.coffeeUntil = performance.now() + COFFEE_MS;
+    player.ped.cup.visible = true;
+    toast('☕ One coffee from VT — enjoy!');
+  }
+
   function resetToRoad() {
     if (player.mode === 'walk') { toast('Get back in the car first (walk to it and press F)'); return; }
     const hit = world.roadIndex.nearest(player.x, player.z, 2500);
@@ -227,7 +253,11 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     p.walkPhase += p.speed * dt * 3.4;
     const swing = Math.sin(p.walkPhase) * Math.min(1, p.speed / 1.5) * 0.7;
     const L = p.ped.limbs;
-    L.lArm.rotation.x = swing; L.rArm.rotation.x = -swing;
+    // holding the coffee: right arm stays bent instead of swinging
+    const hasCoffee = performance.now() < (p.coffeeUntil || 0);
+    p.ped.cup.visible = hasCoffee;
+    L.lArm.rotation.x = swing;
+    L.rArm.rotation.x = hasCoffee ? -1.05 : -swing;
     L.lLeg.rotation.x = -swing; L.rLeg.rotation.x = swing;
     // tell the traffic AI about the parked car so nobody drives through it
     p.parked = p.carPos;
@@ -559,7 +589,11 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       // contextual hint when on foot next to the car
       if (player.mode === 'walk') {
         const d = Math.hypot(player.x - player.carPos.x, player.z - player.carPos.z);
-        $('hint').textContent = d < 4.5 ? 'Press F to get in the Escalade' : '';
+        const hasCoffee = performance.now() < (player.coffeeUntil || 0);
+        if (d < 4.5) $('hint').textContent = 'Press F to get in the Escalade';
+        else if (nearKiosk() && !hasCoffee) $('hint').textContent = 'Press B for a coffee ☕';
+        else if (hasCoffee) $('hint').textContent = '☕ ' + Math.ceil((player.coffeeUntil - performance.now()) / 1000) + 's';
+        else $('hint').textContent = '';
       } else {
         $('hint').textContent = '';
       }
@@ -773,6 +807,8 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       await OSM.clearCache();
       location.search = '?refresh=1';
     };
+
+    window.__DUHOK_W__ = () => ({ world, player, city });
 
     // debug/testing hook: teleport to a lat/lon facing a compass bearing
     // (0 = north, 90 = east), e.g. from the browser console.

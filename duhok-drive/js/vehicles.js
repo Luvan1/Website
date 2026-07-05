@@ -258,7 +258,19 @@ const VEHICLES = (() => {
       s.position.set(0, -0.82, 0.05);
       leg.add(s);
     }
-    return { group: g, limbs: { lArm, rArm, lLeg, rLeg } };
+    // takeaway coffee cup in the right hand (shown after buying at the kiosk)
+    const cup = new THREE.Group();
+    const cupBody = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.15, 10), bodyMat(0xf5f2ea));
+    cup.add(cupBody);
+    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.054, 0.048, 0.055, 10), bodyMat(0xa9853f));
+    cup.add(sleeve);
+    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.022, 10), bodyMat(0x5f4130));
+    lid.position.y = 0.085;
+    cup.add(lid);
+    cup.position.set(0, -0.62, 0.12);
+    cup.visible = false;
+    rArm.add(cup);
+    return { group: g, limbs: { lArm, rArm, lLeg, rLeg }, cup };
   }
 
   return { makeEscalade, makeTrafficCar, makePedestrian };

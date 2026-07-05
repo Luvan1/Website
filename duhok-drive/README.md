@@ -39,6 +39,7 @@ close approximations. Their 3D models are stylised, not photorealistic.
 | F (or E) | get out of / into the Escalade — explore landmarks on foot |
 | Shift | run while on foot |
 | Space | handbrake |
+| B | buy a coffee at the VT kiosk (on foot, at the window) — held for 25 s |
 | C | camera (chase / close / hood) |
 | M | full city map — click any spot to copy its real coordinates |
 | K | copy your current real-world coordinates (for reporting places) |
