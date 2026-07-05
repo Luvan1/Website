@@ -801,6 +801,25 @@ const WORLD = (() => {
     return mesh;
   }
 
+  // transparent text decal (e.g. wall calligraphy)
+  function makeDecal(text, color, w, h) {
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 256;
+    const ctx = cv.getContext('2d');
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    let size = 170;
+    ctx.font = `700 ${size}px 'Noto Naskh Arabic', 'Geeza Pro', 'Amiri', serif`;
+    while (ctx.measureText(text).width > 235 && size > 20) {
+      size -= 8; ctx.font = `700 ${size}px 'Noto Naskh Arabic', 'Geeza Pro', 'Amiri', serif`;
+    }
+    ctx.fillStyle = color;
+    ctx.fillText(text, 128, 132);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = 4;
+    return new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+  }
+
   function lambert(color) { return new THREE.MeshLambertMaterial({ color }); }
 
   function box(g, w, h, d, color, x, y, z, ry) {
@@ -1029,15 +1048,23 @@ const WORLD = (() => {
         // small drive-up coffee kiosk, modelled from the player's photo:
         // white stucco cube, olive wrap-around canopy, yellow VT sign band,
         // dark service window, white planter pots, cones out front
-        box(g, 6.2, 3.1, 4.2, 0xf2efe8, 0, 1.55, 0);
-        box(g, 3.4, 1.5, 0.15, 0x20242a, 0.2, 1.9, 2.13);      // service window
-        box(g, 3.8, 0.12, 0.5, 0xd8cfc0, 0.2, 1.12, 2.3);      // counter ledge
+        box(g, 6.2, 3.9, 4.2, 0xf2efe8, 0, 1.95, 0);
+        box(g, 3.4, 1.2, 0.15, 0x20242a, 0.2, 1.72, 2.13);     // service window at head height
+        box(g, 3.8, 0.12, 0.5, 0xd8cfc0, 0.2, 1.1, 2.3);       // counter ledge
         const ksign = makeSign('VT · VIRGINIA TOBACCO', '#f2c31c', '#17181c', 4.6, 0.85);
-        ksign.position.set(0.2, 2.95, 2.28); g.add(ksign);
-        box(g, 8.6, 0.35, 6.2, 0xa9a53b, 0, 3.95, 0);          // canopy slab
-        box(g, 8.6, 1.15, 0.25, 0xa9a53b, 0, 3.45, 3.05);      // front fascia
-        box(g, 0.25, 1.15, 6.2, 0xa9a53b, -4.25, 3.45, 0);     // left fascia
-        box(g, 0.5, 3.95, 5.2, 0xa9a53b, 4.1, 1.97, 0);        // right wing to ground
+        ksign.position.set(0.2, 3.05, 2.28); g.add(ksign);
+        box(g, 8.6, 0.35, 6.2, 0xa9a53b, 0, 4.75, 0);          // canopy slab
+        box(g, 8.6, 1.2, 0.25, 0xa9a53b, 0, 4.2, 3.05);        // front fascia
+        box(g, 0.25, 1.2, 6.2, 0xa9a53b, -4.25, 4.2, 0);       // left fascia
+        box(g, 0.5, 4.75, 5.2, 0xa9a53b, 4.1, 2.37, 0);        // right wing to ground
+        // black كوپ ("cup") calligraphy on the white walls, as in the photo
+        const cal1 = makeDecal('كوپ', '#17181c', 1.35, 1.35);
+        cal1.position.set(-2.35, 2.5, 2.12); g.add(cal1);
+        const cal2 = makeDecal('كوپ', '#17181c', 1.2, 1.2);
+        cal2.position.set(2.5, 2.5, 2.12); g.add(cal2);
+        const cal3 = makeDecal('كوپ', '#17181c', 1.5, 1.5);
+        cal3.rotation.y = -Math.PI / 2;
+        cal3.position.set(-3.12, 2.4, -0.5); g.add(cal3);      // left side wall
         for (const [px, pz] of [[-2.6, 2.6], [-1.8, 2.75], [1.9, 2.8], [2.6, 2.6], [3.1, 2.85]]) {
           cyl(g, 0.28, 0.22, 0.5, 0xf5f5f2, px, 0.25, pz, 8);
           const bush = new THREE.Mesh(new THREE.SphereGeometry(0.36, 8, 6), lambert(0x4d7a3a));
