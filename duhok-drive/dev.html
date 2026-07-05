@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚙</text></svg>">
+<title>Duhok Drive — real-scale 3D driving in Duhok</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #10141c;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* ---------- start / loading overlay ---------- */
+  #overlay { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center;
+    justify-content: center; background:
+    radial-gradient(1200px 600px at 50% 25%, #2a3550 0%, #141a28 60%, #0c101a 100%); }
+  .panel { text-align: center; color: #e8ecf4; max-width: 640px; padding: 32px; }
+  .panel h1 { font-size: clamp(38px, 7vw, 64px); letter-spacing: 3px; font-weight: 800;
+    background: linear-gradient(180deg, #fff, #ffd75e); -webkit-background-clip: text;
+    background-clip: text; color: transparent; }
+  .panel h2 { font-size: clamp(14px, 2.4vw, 19px); font-weight: 500; color: #9fb2d0; margin: 6px 0 22px; }
+  .panel .kv { display: inline-block; text-align: left; color: #b9c4d8; font-size: 14px;
+    line-height: 1.9; margin-bottom: 20px; }
+  .panel .kv b { color: #fff; display: inline-block; min-width: 92px; }
+  #srcbadge { display: block; margin: 4px auto 14px; font-size: 13px; color: #ffcf7a; }
+  #srcbadge.live { color: #7fe0a2; }
+  #load-row { color: #9fb2d0; font-size: 14px; min-height: 22px; margin-bottom: 14px; }
+  #skipbtn { display: none; margin-left: 10px; background: none; border: 1px solid #6f80a0;
+    border-radius: 8px; color: #cdd7ea; font-size: 12px; padding: 4px 12px; cursor: pointer; }
+  #skipbtn:hover { border-color: #ffd75e; color: #ffd75e; }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid #9fb2d0;
+    border-top-color: transparent; border-radius: 50%; animation: sp 0.9s linear infinite;
+    vertical-align: -2px; margin-right: 8px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  #startbtn { font-size: 20px; font-weight: 700; letter-spacing: 1px; padding: 14px 44px;
+    border-radius: 12px; border: 0; cursor: pointer; color: #14181f;
+    background: linear-gradient(180deg, #ffe9a8, #f2b842); box-shadow: 0 6px 24px rgba(242,184,66,.35); }
+  #startbtn:disabled { opacity: .45; cursor: wait; }
+  #refreshbtn { display: block; margin: 14px auto 0; background: none; border: 0;
+    color: #6f80a0; font-size: 12px; cursor: pointer; text-decoration: underline; }
+  #attribution { margin-top: 18px; font-size: 11px; color: #5d6b85; }
+
+  /* ---------- HUD ---------- */
+  .hud { position: fixed; z-index: 10; color: #fff; user-select: none; pointer-events: none; }
+  #speedo { right: 22px; bottom: 20px; text-align: right;
+    text-shadow: 0 2px 8px rgba(0,0,0,.7); }
+  #speed { font-size: 54px; font-weight: 800; line-height: 1; }
+  #speedo small { font-size: 14px; color: #cfd8ea; letter-spacing: 2px; }
+  #roadname { left: 50%; transform: translateX(-50%); bottom: 20px; font-size: 15px;
+    color: #e8ecf4; background: rgba(10,14,22,.55); padding: 6px 16px; border-radius: 20px;
+    max-width: 60vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  #roadname:empty { display: none; }
+  #minimap { left: 18px; bottom: 18px; position: fixed; z-index: 10; border-radius: 50%;
+    box-shadow: 0 4px 18px rgba(0,0,0,.5); border: 2px solid rgba(255,255,255,.18); }
+  #toast { top: 8vh; left: 50%; transform: translateX(-50%) translateY(-12px); opacity: 0;
+    font-size: 20px; font-weight: 600; background: rgba(12,16,26,.72); padding: 10px 26px;
+    border-radius: 26px; transition: all .35s; border: 1px solid rgba(255,215,94,.35); }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #help { top: 14px; right: 16px; font-size: 12px; color: #cfd8ea; text-align: right;
+    background: rgba(10,14,22,.45); padding: 8px 12px; border-radius: 10px; line-height: 1.7; }
+  #help b { color: #ffd75e; }
+
+  /* ---------- big map ---------- */
+  #bigmap-wrap { display: none; position: fixed; inset: 0; z-index: 20;
+    background: rgba(8,10,16,.82); align-items: center; justify-content: center; }
+  #bigmap { border-radius: 12px; box-shadow: 0 10px 50px rgba(0,0,0,.6); }
+  #bigmap-hint { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
+    color: #9fb2d0; font-size: 14px; }
+
+  /* ---------- touch controls ---------- */
+  #touch { display: none; position: fixed; z-index: 15; inset: 0; pointer-events: none; }
+  .tbtn { pointer-events: auto; position: absolute; width: 74px; height: 74px; border-radius: 50%;
+    background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.3); color: #fff;
+    font-size: 26px; display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent; }
+  #t-left { left: 22px; bottom: 130px; }
+  #t-right { left: 118px; bottom: 130px; }
+  #t-brake { right: 110px; bottom: 130px; background: rgba(220,80,80,.25); }
+  #t-gas { right: 22px; bottom: 130px; background: rgba(90,200,120,.25); }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="overlay">
+  <div class="panel">
+    <h1>DUHOK DRIVE</h1>
+    <h2>Free-roam the real streets of Duhok — at real-life scale — in a Cadillac Escalade</h2>
+    <span id="srcbadge"></span>
+    <div id="load-row"><span class="spin"></span><span id="load-status">Loading…</span><button id="skipbtn">skip — play with offline map</button></div>
+    <div class="kv">
+      <div><b>Drive</b> W A S D &nbsp;or&nbsp; arrow keys</div>
+      <div><b>Handbrake</b> Space &nbsp;&nbsp;<b>Horn</b> H</div>
+      <div><b>Camera</b> C &nbsp;&nbsp;<b>City map</b> M &nbsp;&nbsp;<b>Reset to road</b> R</div>
+    </div><br>
+    <button id="startbtn" disabled>LOADING…</button>
+    <button id="refreshbtn">re-download the latest map data</button>
+    <div id="attribution"></div>
+  </div>
+</div>
+
+<div id="speedo" class="hud"><div id="speed">0</div><small>KM/H</small></div>
+<div id="roadname" class="hud"></div>
+<div id="toast" class="hud"></div>
+<div id="help" class="hud">
+  <b>C</b> camera &nbsp; <b>M</b> map &nbsp; <b>R</b> reset &nbsp; <b>H</b> horn
+  <div style="font-size:10px;color:#8b98b0">map data © OpenStreetMap contributors</div>
+</div>
+<canvas id="minimap" width="230" height="230"></canvas>
+
+<div id="bigmap-wrap">
+  <canvas id="bigmap"></canvas>
+  <div id="bigmap-hint">Press M to close — blue dots are landmarks, red dot is you</div>
+</div>
+
+<div id="touch">
+  <div class="tbtn" id="t-left">◀</div>
+  <div class="tbtn" id="t-right">▶</div>
+  <div class="tbtn" id="t-brake">▼</div>
+  <div class="tbtn" id="t-gas">▲</div>
+</div>
+
+<script src="three.min.js"></script>
+<script src="js/osm.js"></script>
+<script src="js/fallback-map.js"></script>
+<script src="js/world.js"></script>
+<script src="js/vehicles.js"></script>
+<script src="js/traffic.js"></script>
+<script src="js/main.js"></script>
+<script>
+  // if any of the game files above failed to load, say so instead of
+  // spinning forever
+  setTimeout(function () {
+    if (!window.__DUHOK_BOOTED__) {
+      var el = document.getElementById('load-status');
+      if (el) el.textContent = 'Game files failed to load. Make sure the whole duhok-drive folder ' +
+        '(index.html, three.min.js and the js/ folder) is uploaded together, then refresh.';
+      var sp = document.querySelector('.spin');
+      if (sp) sp.style.display = 'none';
+    }
+  }, 3000);
+</script>
+</body>
+</html>
