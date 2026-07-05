@@ -25,7 +25,7 @@ const OSM = (() => {
   // Buildings are only fetched for the urban core (keeps download reasonable).
   const BBOX_BUILDINGS = { s: 36.8330, w: 42.9250, n: 36.8960, e: 43.0400 };
 
-  const CACHE_KEY = 'duhok-city-v3';
+  const CACHE_KEY = 'duhok-city-v4';
 
   function project(lat, lon) {
     return {
@@ -100,6 +100,7 @@ const OSM = (() => {
     `way["landuse"~"^(forest|grass|recreation_ground|cemetery)$"](${bboxStr(BBOX)});` +
     `way["waterway"="river"](${bboxStr(BBOX)});` +
     `node["place"~"^(suburb|neighbourhood|quarter|town|village|hamlet)$"](${bboxStr(BBOX)});` +
+    `node["highway"="traffic_signals"](${bboxStr(BBOX)});` +
     `way["building"](${bboxStr(BBOX_BUILDINGS)});` +
     `);out geom qt;`;
 
@@ -360,10 +361,14 @@ const OSM = (() => {
       const json = await fetchOverpass(Q_ALL, 'Real map of Duhok', onStatus, mirrors, 150000);
       onStatus('Sorting roads, buildings & areas…');
       // split the combined response by tags
-      const roadEls = [], areaEls = [], buildingEls = [], placeEls = [];
+      const roadEls = [], areaEls = [], buildingEls = [], placeEls = [], signals = [];
       for (const el of json.elements) {
         const t = el.tags || {};
-        if (t.highway) roadEls.push(el);
+        if (t.highway === 'traffic_signals') {
+          const p = project(el.lat, el.lon);
+          signals.push({ x: p.x, z: p.z });
+        }
+        else if (t.highway) roadEls.push(el);
         else if (t.building) buildingEls.push(el);
         else if (t.place) placeEls.push(el);
         else areaEls.push(el);
@@ -377,7 +382,7 @@ const OSM = (() => {
       const city = {
         source: 'osm',
         attribution: 'Map data © OpenStreetMap contributors (ODbL)',
-        roads, buildings, places,
+        roads, buildings, places, signals,
         waters: areas.waters, greens: areas.greens, rivers: areas.rivers,
       };
       onStatus('Saving map to cache…');

@@ -198,11 +198,26 @@ const FALLBACK_MAP = (() => {
       return { name, x: p.x, z: p.z, kind: 'suburb' };
     });
 
+    // traffic signals at the main artery junctions
+    const signals = [
+      [36.8695, 43.0000],   // KRO / Dam road
+      [36.8680, 43.0250],   // east roundabout junction
+      [36.8585, 42.9930],   // bazaar
+      [36.8640, 42.9370],   // KRO west end
+      [36.8568, 42.9650],   // Zakho way / Qazi Muhammad
+      [36.8585, 42.9860],   // 11 Aylul / University street
+      [36.8688, 43.0150],   // KRO east
+      [36.8520, 42.9958],   // stadium junction
+    ].map(([lat, lon]) => {
+      const p = OSM.project(lat, lon);
+      return { x: p.x, z: p.z };
+    });
+
     return {
       source: 'offline',
       attribution: 'Offline approximation — connect to the internet for the real OpenStreetMap layout',
       procedural: true,
-      roads, waters, greens, rivers, places,
+      roads, waters, greens, rivers, places, signals,
       buildings: [],
     };
   }

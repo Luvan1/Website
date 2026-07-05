@@ -40,11 +40,15 @@ close approximations. Their 3D models are stylised, not photorealistic.
 | Shift | run while on foot |
 | Space | handbrake |
 | C | camera (chase / close / hood) |
-| M | full city map |
+| M | full city map — click any spot to copy its real coordinates |
+| K | copy your current real-world coordinates (for reporting places) |
 | R | reset onto the nearest road |
 | H | horn |
 
 Touch controls appear automatically on phones/tablets.
+
+Traffic lights stand at the real signal-controlled junctions (from OpenStreetMap
+data) and the AI traffic obeys them.
 
 ## Tech
 

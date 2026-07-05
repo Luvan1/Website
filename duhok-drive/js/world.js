@@ -115,12 +115,80 @@ const WORLD = (() => {
   }
 
   /* ------------------------------ materials ----------------------------- */
+  // Procedural canvas textures give surfaces some grain: asphalt aggregate,
+  // dusty ground, and window grids on building walls.  They are near-white
+  // and multiply with the vertex colours that carry the actual hues.
+  function canvasTex(size, painter, repeat) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = size;
+    painter(cv.getContext('2d'), size);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    if (repeat) tex.repeat.set(repeat[0], repeat[1]);
+    tex.anisotropy = 4;
+    return tex;
+  }
+  function makeAsphaltTex() {
+    return canvasTex(256, (ctx, s) => {
+      ctx.fillStyle = '#f2f2f2'; ctx.fillRect(0, 0, s, s);
+      for (let i = 0; i < 5200; i++) {
+        const g = 190 + (Math.random() * 65) | 0;
+        ctx.fillStyle = `rgb(${g},${g},${g})`;
+        ctx.fillRect(Math.random() * s, Math.random() * s, 1.6, 1.6);
+      }
+      for (let i = 0; i < 130; i++) {              // coarse aggregate
+        const g = 150 + (Math.random() * 60) | 0;
+        ctx.fillStyle = `rgb(${g},${g},${g})`;
+        ctx.fillRect(Math.random() * s, Math.random() * s, 3, 3);
+      }
+    });
+  }
+  function makeGroundTex() {
+    return canvasTex(256, (ctx, s) => {
+      ctx.fillStyle = '#f4f1ea'; ctx.fillRect(0, 0, s, s);
+      for (let i = 0; i < 4200; i++) {
+        const g = 205 + (Math.random() * 50) | 0;
+        ctx.fillStyle = `rgba(${g},${g - 8},${g - 20},0.85)`;
+        ctx.fillRect(Math.random() * s, Math.random() * s, 2.2, 2.2);
+      }
+      for (let i = 0; i < 60; i++) {               // scrub patches
+        ctx.fillStyle = 'rgba(150,160,120,0.25)';
+        ctx.beginPath();
+        ctx.arc(Math.random() * s, Math.random() * s, 3 + Math.random() * 7, 0, 7);
+        ctx.fill();
+      }
+    });
+  }
+  function makeWindowsTex() {
+    // 3×3 windows per tile with plain margins (roofs sample the corner)
+    return canvasTex(128, (ctx, s) => {
+      ctx.fillStyle = '#f4f2ee'; ctx.fillRect(0, 0, s, s);
+      for (let i = 0; i < 700; i++) {
+        const g = 225 + (Math.random() * 30) | 0;
+        ctx.fillStyle = `rgb(${g},${g},${g})`;
+        ctx.fillRect(Math.random() * s, Math.random() * s, 2, 2);
+      }
+      for (let wx = 0; wx < 3; wx++) {
+        for (let wy = 0; wy < 3; wy++) {
+          const x = 14 + wx * 38, y = 12 + wy * 40;
+          ctx.fillStyle = '#7d8ea0';
+          ctx.fillRect(x, y, 22, 26);
+          ctx.fillStyle = 'rgba(255,255,255,0.35)';
+          ctx.fillRect(x + 2, y + 2, 8, 10);
+          ctx.strokeStyle = '#5c6672'; ctx.lineWidth = 2;
+          ctx.strokeRect(x, y, 22, 26);
+        }
+      }
+    });
+  }
+
   const MAT = {};
   function initMaterials() {
     MAT.vcLambert = new THREE.MeshLambertMaterial({ vertexColors: true });
     MAT.vcBasic = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
-    MAT.water = new THREE.MeshLambertMaterial({ color: 0x2e6f9e });
-    MAT.green = new THREE.MeshLambertMaterial({ color: 0x5f8a45 });
+    MAT.terrain = new THREE.MeshLambertMaterial({ vertexColors: true, map: makeGroundTex() });
+    MAT.road = new THREE.MeshBasicMaterial({ vertexColors: true, map: makeAsphaltTex(), side: THREE.DoubleSide });
+    MAT.walls = new THREE.MeshBasicMaterial({ vertexColors: true, map: makeWindowsTex(), side: THREE.DoubleSide });
   }
 
   /* --------------------------- geometry helpers ------------------------- */
@@ -129,12 +197,15 @@ const WORLD = (() => {
 
   // Accumulator for merged, non-indexed, vertex-coloured triangles.
   function makeAcc() {
-    return { pos: [], col: [], nor: null };
+    return { pos: [], col: [], uv: [], nor: null };
   }
   function accToMesh(acc, material) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(acc.pos, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(acc.col, 3));
+    if (acc.uv.length * 3 === acc.pos.length * 2) {
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(acc.uv, 2));
+    }
     if (material === MAT.vcLambert) g.computeVertexNormals();
     const m = new THREE.Mesh(g, material);
     m.matrixAutoUpdate = false;
@@ -144,9 +215,13 @@ const WORLD = (() => {
     acc.pos.push(ax, ay, az, bx, by, bz, cx, cy, cz);
     acc.col.push(r, g, b, r, g, b, r, g, b);
   }
-  function pushQuad(acc, a, b, c, d, col) {
+  function pushQuad(acc, a, b, c, d, col, uvs) {
     pushTri(acc, a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], col[0], col[1], col[2]);
     pushTri(acc, a[0], a[1], a[2], c[0], c[1], c[2], d[0], d[1], d[2], col[0], col[1], col[2]);
+    if (uvs) {
+      acc.uv.push(uvs[0][0], uvs[0][1], uvs[1][0], uvs[1][1], uvs[2][0], uvs[2][1]);
+      acc.uv.push(uvs[0][0], uvs[0][1], uvs[2][0], uvs[2][1], uvs[3][0], uvs[3][1]);
+    }
   }
 
   // Ribbon along a flat [x,z,...] polyline at height y with width w.
@@ -154,7 +229,7 @@ const WORLD = (() => {
     const n = pts.length / 2;
     if (n < 2) return;
     const hw = w / 2;
-    let prevL = null, prevR = null;
+    let prevL = null, prevR = null, prevV = 0, vDist = 0;
     for (let i = 0; i < n; i++) {
       const x = pts[i * 2], z = pts[i * 2 + 1];
       const x0 = i > 0 ? pts[(i - 1) * 2] : x, z0 = i > 0 ? pts[(i - 1) * 2 + 1] : z;
@@ -162,12 +237,16 @@ const WORLD = (() => {
       let dx = x1 - x0, dz = z1 - z0;
       const len = Math.hypot(dx, dz) || 1;
       dx /= len; dz /= len;
+      if (i > 0) vDist += Math.hypot(x - x0, z - z0) / (w || 1);
       // perpendicular (left of travel direction)
       const px = -dz, pz = dx;
       const L = [x + px * hw, y, z + pz * hw];
       const R = [x - px * hw, y, z - pz * hw];
-      if (prevL) pushQuad(acc, prevL, prevR, R, L, col);
-      prevL = L; prevR = R;
+      if (prevL) {
+        pushQuad(acc, prevL, prevR, R, L, col,
+          [[0, prevV], [1, prevV], [1, vDist], [0, vDist]]);
+      }
+      prevL = L; prevR = R; prevV = vDist;
     }
   }
 
@@ -214,7 +293,7 @@ const WORLD = (() => {
     return out;
   }
 
-  function pushPolygon(acc, poly, y, col) {
+  function pushPolygon(acc, poly, y, col, uvConst) {
     const contour = [];
     for (let i = 0; i < poly.length; i += 2) contour.push(new THREE.Vector2(poly[i], poly[i + 1]));
     if (contour.length < 3) return;
@@ -227,6 +306,7 @@ const WORLD = (() => {
         contour[t[1]].x, y, contour[t[1]].y,
         contour[t[2]].x, y, contour[t[2]].y,
         col[0], col[1], col[2]);
+      if (uvConst) acc.uv.push(uvConst[0], uvConst[1], uvConst[0], uvConst[1], uvConst[0], uvConst[1]);
     }
   }
 
@@ -270,7 +350,9 @@ const WORLD = (() => {
     // drivable network stays level (roads are rendered at y≈0).
     return function heightAt(x, z) {
       const raw = rawHeight(x, z);
-      if (raw < 0.4) return raw;
+      // NB: negative valley dips must be flattened near roads too, otherwise
+      // the car sinks below the road surface
+      if (raw > -0.05 && raw < 0.4) return raw;
       const near = roadIndex.nearest(x, z, 150);
       if (!near) return raw;
       const d = near.d;
@@ -306,7 +388,10 @@ const WORLD = (() => {
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, MAT.vcLambert);
+    // scale the grain texture over the whole plane
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 260, uv.getY(i) * 195);
+    const mesh = new THREE.Mesh(geo, MAT.terrain);
     mesh.matrixAutoUpdate = false;
     scene.add(mesh);
   }
@@ -340,7 +425,7 @@ const WORLD = (() => {
       }
       i++;
     }
-    scene.add(accToMesh(asphalt, MAT.vcBasic));
+    scene.add(accToMesh(asphalt, MAT.road));
     scene.add(accToMesh(lines, MAT.vcBasic));
   }
 
@@ -356,7 +441,8 @@ const WORLD = (() => {
   function buildWaterAndGreens(scene, city, waterInfos) {
     const acc = makeAcc(), gAcc = makeAcc();
     for (const wi of waterInfos) {
-      pushPolygon(acc, wi.poly, wi.y, lin([0.16, 0.42, 0.62]));
+      // the dam lake reads as deep turquoise in real photos
+      pushPolygon(acc, wi.poly, wi.y, lin([0.13, 0.47, 0.52]));
     }
     for (const rv of city.rivers || []) {
       pushRibbon(acc, rv, 8, 0.03, lin([0.2, 0.45, 0.62]));
@@ -378,7 +464,7 @@ const WORLD = (() => {
     const sunX = 0.55, sunZ = -0.35;
     let acc = makeAcc(), inChunk = 0;
     const flush = () => {
-      if (acc.pos.length) scene.add(accToMesh(acc, MAT.vcBasic));
+      if (acc.pos.length) scene.add(accToMesh(acc, MAT.walls));
       acc = makeAcc(); inChunk = 0;
     };
     for (const b of buildings) {
@@ -387,7 +473,7 @@ const WORLD = (() => {
       if (n < 3) continue;
       const base = BUILDING_PALETTE[(Math.floor(poly[0] * 13.7) & 1048575) % BUILDING_PALETTE.length];
       const h = b.h;
-      // walls
+      // walls (window texture repeats every ~10 m / 3 floors)
       for (let i = 0; i < n; i++) {
         const j = (i + 1) % n;
         const ax = poly[i * 2], az = poly[i * 2 + 1];
@@ -396,10 +482,13 @@ const WORLD = (() => {
         const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;
         const lum = 0.62 + 0.34 * Math.max(0, nx * sunX + nz * sunZ);
         const col = [base[0] * lum, base[1] * lum, base[2] * lum];
-        pushQuad(acc, [ax, 0, az], [bx, 0, bz], [bx, h, bz], [ax, h, az], col);
+        const wl = Math.hypot(bx - ax, bz - az);
+        const u1 = Math.max(0.35, wl / 10), v1 = Math.max(0.4, h / 9.5);
+        pushQuad(acc, [ax, 0, az], [bx, 0, bz], [bx, h, bz], [ax, h, az], col,
+          [[0, 0], [u1, 0], [u1, v1], [0, v1]]);
       }
-      // roof
-      pushPolygon(acc, poly, h, [base[0] * 0.55, base[1] * 0.55, base[2] * 0.55]);
+      // roof (samples the plain corner of the window tile)
+      pushPolygon(acc, poly, h, [base[0] * 0.55, base[1] * 0.55, base[2] * 0.55], [0.02, 0.02]);
       // collision (AABB is a fair fit for typical houses)
       const bb = polyBounds(poly);
       if (bb.x1 - bb.x0 < 120 && bb.z1 - bb.z0 < 120) colHash.addBox(bb.x0, bb.z0, bb.x1, bb.z1);
@@ -412,7 +501,8 @@ const WORLD = (() => {
     const geo = new THREE.BoxGeometry(1, 1, 1);
     geo.translate(0, 0.5, 0);
     const count = 6500;
-    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff }), count);
+    const mesh = new THREE.InstancedMesh(geo,
+      new THREE.MeshLambertMaterial({ color: 0xffffff, map: makeWindowsTex() }), count);
     const m4 = new THREE.Matrix4(), col = new THREE.Color();
     let idx = 0;
     const centre = OSM.project(36.8585, 42.9930);      // bazaar = downtown
@@ -594,6 +684,9 @@ const WORLD = (() => {
         wall.position.set(0, 0, -140);
         g.add(wall);
         box(g, 624, 2.2, 9, 0x777d85, 0, 58.5, -140);   // crest road
+        const dsign = makeSign('DUHOK DAM', '#26502f', '#ffffff', 60, 8);
+        dsign.position.set(0, 34, -96);                  // on the city-side face
+        g.add(dsign);
         cyl(g, 6, 6, 66, 0xb8b2a6, -80, 33, -190, 12);         // intake tower
         box(g, 40, 14, 30, 0x8a8478, 120, 7, -60);              // spillway house
         addCol(640, 90, 0, -140);
@@ -632,6 +725,9 @@ const WORLD = (() => {
           cyl(g, 1.2, 1.6, 42, 0xcccccc, Math.cos(a) * 140, 21, Math.sin(a) * 112 * 0.9, 8);
           box(g, 8, 5, 1.2, 0xf3f0dd, Math.cos(a) * 140, 44, Math.sin(a) * 112 * 0.9, -a);
         }
+        const ssign = makeSign('DUHOK STADIUM', '#1c3f7a', '#ffffff', 44, 5.5);
+        ssign.position.set(0, 23, 118);                  // over the entrance
+        g.add(ssign);
         // ring collision approximated with four boxes
         addCol(270, 40, 0, -100); addCol(270, 40, 0, 100);
         addCol(40, 200, -125, 0); addCol(40, 200, 125, 0);
@@ -710,6 +806,10 @@ const WORLD = (() => {
           box(g, 27, 1.6, 23, 0x9c6b3f, x, 7.2, z);
           addCol(27, 23, x, z);
         }
+        const bsign = makeSign('GRAND BAZAAR', '#7a4a1e', '#ffe9b0', 30, 3.6);
+        bsign.position.set(-23, 10, 4);
+        bsign.rotation.y = Math.PI / 2;
+        g.add(bsign);
         box(g, 44, 12, 34, 0xf3ede0, 62, 6, 4);                 // prayer hall
         box(g, 46, 1.2, 36, 0xe3dbc8, 62, 12.4, 4);
         const drum = cyl(g, 11, 12, 4, 0xf3ede0, 62, 14, 4, 18);
@@ -829,6 +929,80 @@ const WORLD = (() => {
     scene.add(trunks); scene.add(crowns);
   }
 
+  /* --------------------------- traffic signals -------------------------- */
+  // One signal head per mapped traffic_signals node, cycling on a shared
+  // clock: north-south and east-west axes alternate green.
+  const SIG_PERIOD = 26;
+  function signalStateFor(clock, axis) {
+    const t = clock % SIG_PERIOD;
+    const local = axis === 'ns' ? t : (t + SIG_PERIOD / 2) % SIG_PERIOD;
+    if (local < 10) return 'green';
+    if (local < 12) return 'amber';
+    return 'red';
+  }
+
+  function buildTrafficSignals(scene, city, roadIndex) {
+    const mats = {
+      redOn: new THREE.MeshBasicMaterial({ color: 0xff2a1e }),
+      redOff: new THREE.MeshBasicMaterial({ color: 0x3c0e0a }),
+      amberOn: new THREE.MeshBasicMaterial({ color: 0xffb020 }),
+      amberOff: new THREE.MeshBasicMaterial({ color: 0x40300c }),
+      greenOn: new THREE.MeshBasicMaterial({ color: 0x2aff5a }),
+      greenOff: new THREE.MeshBasicMaterial({ color: 0x0c3a18 }),
+    };
+    const poleMat = new THREE.MeshLambertMaterial({ color: 0x3a3d42 });
+    const headMat = new THREE.MeshLambertMaterial({ color: 0x1e2126 });
+    const lightGeo = new THREE.SphereGeometry(0.13, 8, 6);
+    const items = [];
+    const group = new THREE.Group();
+    for (const sig of city.signals || []) {
+      const near = roadIndex.nearest(sig.x, sig.z, 40);
+      if (!near) continue;
+      const s = near.seg;
+      let ux = s.bx - s.ax, uz = s.bz - s.az;
+      const l = Math.hypot(ux, uz) || 1; ux /= l; uz /= l;
+      const cls = OSM.ROAD_CLASSES[s.data.cls] || OSM.ROAD_CLASSES.residential;
+      const axis = Math.abs(ux) > Math.abs(uz) ? 'ew' : 'ns';
+      const g = new THREE.Group();
+      // pole at the right-hand kerb, head facing oncoming traffic
+      g.position.set(sig.x - uz * (cls.w / 2 + 1.0), 0, sig.z + ux * (cls.w / 2 + 1.0));
+      g.rotation.y = Math.atan2(ux, uz) + Math.PI;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 4.6, 8), poleMat);
+      pole.position.y = 2.3;
+      g.add(pole);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 1.15, 0.3), headMat);
+      head.position.set(0, 4.6, 0);
+      g.add(head);
+      const lights = {};
+      for (const [name, dy] of [['red', 0.36], ['amber', 0], ['green', -0.36]]) {
+        const m = new THREE.Mesh(lightGeo, mats[name + 'Off']);
+        m.position.set(0, 4.6 + dy, 0.14);
+        g.add(m);
+        lights[name] = m;
+      }
+      group.add(g);
+      items.push({ x: sig.x, z: sig.z, axis, lights, state: '' });
+    }
+    scene.add(group);
+
+    let clock = 5;   // start mid-green
+    return {
+      items,
+      stateFor(axis) { return signalStateFor(clock, axis); },
+      update(dt) {
+        clock += dt;
+        for (const it of items) {
+          const st = signalStateFor(clock, it.axis);
+          if (st === it.state) continue;
+          it.state = st;
+          it.lights.red.material = st === 'red' ? mats.redOn : mats.redOff;
+          it.lights.amber.material = st === 'amber' ? mats.amberOn : mats.amberOff;
+          it.lights.green.material = st === 'green' ? mats.greenOn : mats.greenOff;
+        }
+      },
+    };
+  }
+
   /* ------------------------------ main entry ---------------------------- */
 
   function buildWorld(scene, city) {
@@ -874,12 +1048,14 @@ const WORLD = (() => {
     }
 
     buildTrees(scene, city, heightAt, roadIndex);
+    const signalCtl = buildTrafficSignals(scene, city, roadIndex);
 
     return {
       heightAt,
       roadIndex,
       collisions: colHash,
       landmarks: landmarkGroups,
+      signals: signalCtl,
       nearestRoad(x, z, maxR) {
         const hit = roadIndex.nearest(x, z, maxR || 130);
         if (!hit) return null;
@@ -889,6 +1065,7 @@ const WORLD = (() => {
       },
       places: city.places || [],
       update(dt, px, pz) {
+        signalCtl.update(dt);
         for (const grp of landmarkGroups) {
           if (grp.userData.wheel) grp.userData.wheel.rotation.z += dt * 0.15;
           const label = grp.userData.label;

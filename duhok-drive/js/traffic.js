@@ -172,6 +172,7 @@ const TRAFFIC = (() => {
   function create(scene, city, nodes, opts) {
     const roads = city.roads;
     const N_CARS = (opts && opts.count) || 46;
+    const signals = (opts && opts.signals) || null;
     const rand = () => Math.random();
 
     // spawn weights: busier main roads
@@ -242,7 +243,7 @@ const TRAFFIC = (() => {
       car.ux = ux; car.uz = uz;
       const h = Math.atan2(ux, uz);
       car.heading = h;
-      car.mesh.position.set(car.x, 0, car.z);
+      car.mesh.position.set(car.x, 0.17, car.z);   // on top of the asphalt layers
       car.mesh.rotation.y = h;
     }
 
@@ -362,6 +363,24 @@ const TRAFFIC = (() => {
           const safe = 7 + car.speed * 0.9;
           if (obsD < safe) target = Math.min(target, Math.max(0, obsSpeed - 0.5));
           if (obsD < 4.5) target = 0;
+        }
+
+        // stop for red lights (cars already on the junction keep going)
+        if (signals) {
+          const carAxis = Math.abs(car.ux) > Math.abs(car.uz) ? 'ew' : 'ns';
+          const st = signals.stateFor(carAxis);
+          if (st !== 'green') {
+            for (const sig of signals.items) {
+              const dxs = sig.x - car.x, dzs = sig.z - car.z;
+              if (dxs > 50 || dxs < -50 || dzs > 50 || dzs < -50) continue;
+              const fwd = dxs * car.ux + dzs * car.uz;
+              if (fwd < 5 || fwd > 45) continue;
+              const side = Math.abs(-dxs * car.uz + dzs * car.ux);
+              if (side > 7) continue;
+              if (fwd < 12) target = 0;
+              else target = Math.min(target, (fwd - 10) * 0.55);
+            }
+          }
         }
 
         // accelerate / brake

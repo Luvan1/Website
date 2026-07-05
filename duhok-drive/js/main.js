@@ -65,6 +65,7 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       if (e.code === 'KeyR') resetToRoad();
       if (e.code === 'KeyH') audio && audio.horn();
       if (e.code === 'KeyF' || e.code === 'KeyE') toggleWalkMode();
+      if (e.code === 'KeyK') shareLocation();
     });
     window.addEventListener('keyup', e => {
       const k = KEYMAP[e.code];
@@ -229,9 +230,10 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       }
     }
 
-    p.y = world.heightAt(p.x, p.z);
     const road = world.nearestRoad(p.x, p.z, 160);
     p.offroad = !road || road.d > road.halfW + 2.0;
+    const th = world.heightAt(p.x, p.z);
+    p.y = p.offroad ? th : Math.max(th, 0.17);
     p.roadName = road && road.d < road.halfW + 12 ? road.name : '';
 
     // pedestrian mesh + walk cycle
@@ -341,8 +343,9 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       }
     }
 
-    // --- ground height (off-road onto the hills)
-    p.y = world.heightAt(p.x, p.z);
+    // --- ground height: ride ON the asphalt when on a road, terrain otherwise
+    const th = world.heightAt(p.x, p.z);
+    p.y = p.offroad ? th : Math.max(th, 0.17);
 
     // --- car mesh
     const g = p.car.group;
@@ -500,6 +503,17 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     ctx.restore();
   }
 
+  // Real-world coordinates of the player, for reporting locations back
+  // (e.g. "add this building here" with a photo).
+  function shareLocation() {
+    if (!player) return;
+    const ll = OSM.unproject(player.x, player.z);
+    const txt = ll.lat.toFixed(5) + ', ' + ll.lon.toFixed(5);
+    try { navigator.clipboard.writeText(txt); } catch (e) {}
+    toast('📌 You are at ' + txt + ' (copied to clipboard)');
+  }
+
+  let bigScale = 1;
   function toggleMap() {
     mapBig = !mapBig;
     $('bigmap-wrap').style.display = mapBig ? 'flex' : 'none';
@@ -511,6 +525,19 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     cv.width = W; cv.height = W * (mapCanvas.height / mapCanvas.width);
     const ctx = cv.getContext('2d');
     const s = W / mapCanvas.width;
+    bigScale = s;
+    if (!cv._coordsWired) {
+      cv._coordsWired = true;
+      cv.addEventListener('click', ev => {
+        const r = cv.getBoundingClientRect();
+        const x = mapX0 + (ev.clientX - r.left) / bigScale / mapScale;
+        const z = mapZ0 + (ev.clientY - r.top) / bigScale / mapScale;
+        const ll = OSM.unproject(x, z);
+        const txt = ll.lat.toFixed(5) + ', ' + ll.lon.toFixed(5);
+        try { navigator.clipboard.writeText(txt); } catch (e) {}
+        toast('📌 That spot is ' + txt + ' (copied to clipboard)');
+      });
+    }
     ctx.drawImage(mapCanvas, 0, 0, cv.width, cv.height);
     ctx.font = 'bold 12px system-ui';
     for (const lm of OSM.LANDMARKS) {
@@ -660,6 +687,8 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       roadCount: city.roads.length,
       buildingCount: (city.buildings || []).length,
       source: city.source,
+      sigNS: world.signals ? world.signals.stateFor('ns') : 'none',
+      sigCount: world.signals ? world.signals.items.length : 0,
     };
   }
 
@@ -711,7 +740,7 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     const buildAll = () => {
       const nodes = TRAFFIC.prepare(city);
       world = WORLD.buildWorld(scene, city);
-      traffic = TRAFFIC.create(scene, city, nodes, { count: 46 });
+      traffic = TRAFFIC.create(scene, city, nodes, { count: 46, signals: world.signals });
       initPlayer();
       prerenderMap();
     };
