@@ -4,6 +4,8 @@
  * ==========================================================================*/
 'use strict';
 
+window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing files
+
 (() => {
 
   /* ------------------------------- helpers ------------------------------ */
@@ -30,18 +32,21 @@
     scene.background = new THREE.Color(0xbfd6ea);
     scene.fog = new THREE.Fog(0xc4d4e0, 900, 4200);
     camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.3, 9000);
-
-    const hemi = new THREE.HemisphereLight(0xd8e8ff, 0x8a7a5a, 0.95);
-    scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xfff2dd, 1.35);
-    sun.position.set(-1400, 1800, 900);
-    scene.add(sun);
+    addLights();
 
     window.addEventListener('resize', () => {
       renderer.setSize(window.innerWidth, window.innerHeight);
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
     });
+  }
+
+  function addLights() {
+    const hemi = new THREE.HemisphereLight(0xd8e8ff, 0x8a7a5a, 0.95);
+    scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xfff2dd, 1.35);
+    sun.position.set(-1400, 1800, 900);
+    scene.add(sun);
   }
 
   /* -------------------------------- input ------------------------------- */
@@ -514,10 +519,30 @@
 
   /* ------------------------------- boot ---------------------------------- */
   async function boot() {
-    initRenderer();
+    const status = msg => { $('load-status').textContent = msg; };
+
+    try {
+      initRenderer();
+    } catch (e) {
+      console.error(e);
+      status('Could not start 3D graphics (WebGL). Try another browser, or enable hardware acceleration.');
+      $('load-row').querySelector('.spin').style.display = 'none';
+      return;
+    }
     initInput();
 
-    const status = msg => { $('load-status').textContent = msg; };
+    // never leave the player stuck on the loading screen:
+    // a skip button appears after a few seconds, and after 90 s we give up
+    // on the download automatically and use the bundled map.
+    const skipBtn = $('skipbtn');
+    const skipTimer = setTimeout(() => { skipBtn.style.display = 'inline-block'; }, 6000);
+    const giveUpTimer = setTimeout(() => { OSM.skipLive(); }, 90000);
+    skipBtn.onclick = () => {
+      skipBtn.disabled = true;
+      status('Skipping the download — using the offline map…');
+      OSM.skipLive();
+    };
+
     const opts = {
       onStatus: status,
       forceOffline: params.get('offline') === '1',
@@ -530,15 +555,41 @@
       console.error(e);
       city = FALLBACK_MAP.build();
     }
+    clearTimeout(skipTimer);
+    clearTimeout(giveUpTimer);
+    skipBtn.style.display = 'none';
 
     status('Building the city…');
     await new Promise(r => setTimeout(r, 30));   // let the status paint
 
-    const nodes = TRAFFIC.prepare(city);
-    world = WORLD.buildWorld(scene, city);
-    traffic = TRAFFIC.create(scene, city, nodes, { count: 46 });
-    initPlayer();
-    prerenderMap();
+    const buildAll = () => {
+      const nodes = TRAFFIC.prepare(city);
+      world = WORLD.buildWorld(scene, city);
+      traffic = TRAFFIC.create(scene, city, nodes, { count: 46 });
+      initPlayer();
+      prerenderMap();
+    };
+    try {
+      buildAll();
+    } catch (e) {
+      // a malformed live dataset must never brick the game — rebuild offline
+      console.error('world build failed, retrying with the offline map', e);
+      if (city.source === 'osm') {
+        try {
+          scene.clear();
+          addLights();
+          city = FALLBACK_MAP.build();
+          buildAll();
+        } catch (e2) {
+          console.error(e2);
+          status('Failed to build the city: ' + (e2 && e2.message || e2));
+          return;
+        }
+      } else {
+        status('Failed to build the city: ' + (e && e.message || e));
+        return;
+      }
+    }
 
     // source badge
     const badge = $('srcbadge');

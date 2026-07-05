@@ -130,13 +130,30 @@ const OSM = (() => {
   }
 
   /* ------------------------- Overpass API fetch -------------------------- */
-  async function fetchOverpass(query, label, onStatus, mirrors) {
+  // The Overpass servers can be busy and queue requests for a long time, so
+  // every fetch has a hard time budget and a stall detector, and the player
+  // can abort the whole live load at any moment (skipLive → offline map).
+  let liveAborted = false;
+  const liveControllers = new Set();
+  function skipLive() {
+    liveAborted = true;
+    for (const c of liveControllers) { try { c.abort(); } catch (e) {} }
+  }
+
+  async function fetchOverpass(query, label, onStatus, mirrors, maxMs) {
     let lastErr = null;
     for (const url of mirrors) {
+      if (liveAborted) throw new Error('skipped by user');
+      const ctl = new AbortController();
+      liveControllers.add(ctl);
+      const started = Date.now();
+      let lastProgress = started;
+      // give up if nothing has arrived for 25 s, or the budget is spent
+      const watchdog = setInterval(() => {
+        if (Date.now() - lastProgress > 25000 || Date.now() - started > maxMs) ctl.abort();
+      }, 1000);
       try {
-        onStatus(`${label} — contacting ${new URL(url).host}…`, null);
-        const ctl = new AbortController();
-        const timer = setTimeout(() => ctl.abort(), 150000);
+        onStatus(`${label} — contacting ${new URL(url).host}…`);
         const resp = await fetch(url, {
           method: 'POST',
           body: new URLSearchParams({ data: query }),
@@ -152,7 +169,8 @@ const OSM = (() => {
             const { done, value } = await reader.read();
             if (done) break;
             chunks.push(value); received += value.length;
-            onStatus(`${label} — downloading ${(received / 1048576).toFixed(1)} MB…`, null);
+            lastProgress = Date.now();
+            onStatus(`${label} — downloading ${(received / 1048576).toFixed(1)} MB…`);
           }
           const all = new Uint8Array(received);
           let off = 0; for (const c of chunks) { all.set(c, off); off += c.length; }
@@ -160,14 +178,16 @@ const OSM = (() => {
         } else {
           text = await resp.text();
         }
-        clearTimeout(timer);
-        onStatus(`${label} — parsing…`, null);
+        onStatus(`${label} — parsing…`);
         const json = JSON.parse(text);
         if (!json.elements) throw new Error('no elements in response');
         return json;
       } catch (e) {
         lastErr = e;
         console.warn('Overpass mirror failed:', url, e);
+      } finally {
+        clearInterval(watchdog);
+        liveControllers.delete(ctl);
       }
     }
     throw lastErr || new Error('all Overpass mirrors failed');
@@ -297,19 +317,22 @@ const OSM = (() => {
 
     if (opts.forceOffline) return FALLBACK_MAP.build();
 
+    liveAborted = false;
     try {
-      const roadsJson = await fetchOverpass(Q_ROADS, 'Real road network of Duhok', onStatus, mirrors);
+      const roadsJson = await fetchOverpass(Q_ROADS, 'Real road network of Duhok', onStatus, mirrors, 70000);
       const roads = parseRoads(roadsJson);
       if (roads.length < 30) throw new Error('suspiciously little road data');
 
+      // Roads (the important part) are in hand — the extras below are each
+      // optional, so a skip/failure just means we go on without them.
       let areas = { waters: [], greens: [], rivers: [] };
       try {
-        areas = parseAreas(await fetchOverpass(Q_AREAS, 'Dam lake, parks & rivers', onStatus, mirrors));
+        areas = parseAreas(await fetchOverpass(Q_AREAS, 'Dam lake, parks & rivers', onStatus, mirrors, 35000));
       } catch (e) { console.warn('areas fetch failed', e); }
 
       let buildings = [];
       try {
-        buildings = parseBuildings(await fetchOverpass(Q_BUILDINGS, 'Real buildings', onStatus, mirrors));
+        buildings = parseBuildings(await fetchOverpass(Q_BUILDINGS, 'Real buildings', onStatus, mirrors, 70000));
       } catch (e) { console.warn('buildings fetch failed', e); }
 
       const city = {
@@ -329,5 +352,5 @@ const OSM = (() => {
     }
   }
 
-  return { ANCHOR, BBOX, LANDMARKS, ROAD_CLASSES, project, unproject, loadCity, clearCache };
+  return { ANCHOR, BBOX, LANDMARKS, ROAD_CLASSES, project, unproject, loadCity, clearCache, skipLive };
 })();

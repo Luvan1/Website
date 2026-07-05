@@ -26,6 +26,9 @@
   #srcbadge { display: block; margin: 4px auto 14px; font-size: 13px; color: #ffcf7a; }
   #srcbadge.live { color: #7fe0a2; }
   #load-row { color: #9fb2d0; font-size: 14px; min-height: 22px; margin-bottom: 14px; }
+  #skipbtn { display: none; margin-left: 10px; background: none; border: 1px solid #6f80a0;
+    border-radius: 8px; color: #cdd7ea; font-size: 12px; padding: 4px 12px; cursor: pointer; }
+  #skipbtn:hover { border-color: #ffd75e; color: #ffd75e; }
   .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid #9fb2d0;
     border-top-color: transparent; border-radius: 50%; animation: sp 0.9s linear infinite;
     vertical-align: -2px; margin-right: 8px; }
@@ -85,7 +88,7 @@
     <h1>DUHOK DRIVE</h1>
     <h2>Free-roam the real streets of Duhok — at real-life scale — in a Cadillac Escalade</h2>
     <span id="srcbadge"></span>
-    <div id="load-row"><span class="spin"></span><span id="load-status">Loading…</span></div>
+    <div id="load-row"><span class="spin"></span><span id="load-status">Loading…</span><button id="skipbtn">skip — play with offline map</button></div>
     <div class="kv">
       <div><b>Drive</b> W A S D &nbsp;or&nbsp; arrow keys</div>
       <div><b>Handbrake</b> Space &nbsp;&nbsp;<b>Horn</b> H</div>
@@ -125,5 +128,18 @@
 <script src="js/vehicles.js"></script>
 <script src="js/traffic.js"></script>
 <script src="js/main.js"></script>
+<script>
+  // if any of the game files above failed to load, say so instead of
+  // spinning forever
+  setTimeout(function () {
+    if (!window.__DUHOK_BOOTED__) {
+      var el = document.getElementById('load-status');
+      if (el) el.textContent = 'Game files failed to load. Make sure the whole duhok-drive folder ' +
+        '(index.html, three.min.js and the js/ folder) is uploaded together, then refresh.';
+      var sp = document.querySelector('.spin');
+      if (sp) sp.style.display = 'none';
+    }
+  }, 3000);
+</script>
 </body>
 </html>
