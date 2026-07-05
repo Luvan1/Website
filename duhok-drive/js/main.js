@@ -663,7 +663,7 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     // on the download automatically and use the bundled map.
     const skipBtn = $('skipbtn');
     const skipTimer = setTimeout(() => { skipBtn.style.display = 'inline-block'; }, 6000);
-    const giveUpTimer = setTimeout(() => { OSM.skipLive(); }, 90000);
+    const giveUpTimer = setTimeout(() => { OSM.skipLive(); }, 160000);
     skipBtn.onclick = () => {
       skipBtn.disabled = true;
       status('Skipping the download — using the offline map…');
@@ -727,7 +727,8 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     } else {
       badge.textContent = '⚠ Offline map (approximate) — open with internet for the real streets';
     }
-    $('attribution').textContent = city.attribution || '';
+    $('attribution').textContent = (city.attribution || '') +
+      (city.offlineReason ? ` — download failed: ${city.offlineReason}` : '');
 
     $('load-row').style.display = 'none';
     const btn = $('startbtn');

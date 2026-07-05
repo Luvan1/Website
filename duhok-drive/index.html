@@ -186,7 +186,7 @@ const OSM = (() => {
   // Buildings are only fetched for the urban core (keeps download reasonable).
   const BBOX_BUILDINGS = { s: 36.8330, w: 42.9250, n: 36.8960, e: 43.0400 };
 
-  const CACHE_KEY = 'duhok-city-v2';
+  const CACHE_KEY = 'duhok-city-v3';
 
   function project(lat, lon) {
     return {
@@ -243,16 +243,26 @@ const OSM = (() => {
     'https://overpass.kumi.systems/api/interpreter',
     'https://overpass.private.coffee/api/interpreter',
     'https://z.overpass-api.de/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+    'https://overpass.osm.jp/api/interpreter',
   ];
 
   function bboxStr(b) { return `${b.s},${b.w},${b.n},${b.e}`; }
 
-  // service roads (campus/mall/compound access lanes) are included, but not
-  // parking aisles and private driveways
-  const Q_ROADS = `[out:json][timeout:120];(way["highway"~"^(${HIGHWAY_REGEX})$"](${bboxStr(BBOX)});way["highway"="service"]["service"!~"parking_aisle|driveway"](${bboxStr(BBOX)}););out geom qt;`;
-  const Q_PLACES = `[out:json][timeout:60];node["place"~"^(suburb|neighbourhood|quarter|town|village|hamlet)$"](${bboxStr(BBOX)});out qt;`;
-  const Q_AREAS = `[out:json][timeout:90];(way["natural"="water"](${bboxStr(BBOX)});relation["natural"="water"](${bboxStr(BBOX)});way["leisure"~"^(park|garden|pitch|stadium)$"](${bboxStr(BBOX)});way["landuse"~"^(forest|grass|recreation_ground|cemetery)$"](${bboxStr(BBOX)});way["waterway"="river"](${bboxStr(BBOX)}););out geom qt;`;
-  const Q_BUILDINGS = `[out:json][timeout:120];way["building"](${bboxStr(BBOX_BUILDINGS)});out geom qt;`;
+  // Everything in ONE request (one server queue wait instead of four):
+  // roads incl. service lanes (minus parking aisles / private driveways),
+  // water, parks, rivers, area names and the buildings of the urban core.
+  const Q_ALL = `[out:json][timeout:90];(` +
+    `way["highway"~"^(${HIGHWAY_REGEX})$"](${bboxStr(BBOX)});` +
+    `way["highway"="service"]["service"!~"parking_aisle|driveway"](${bboxStr(BBOX)});` +
+    `way["natural"="water"](${bboxStr(BBOX)});` +
+    `relation["natural"="water"](${bboxStr(BBOX)});` +
+    `way["leisure"~"^(park|garden|pitch|stadium)$"](${bboxStr(BBOX)});` +
+    `way["landuse"~"^(forest|grass|recreation_ground|cemetery)$"](${bboxStr(BBOX)});` +
+    `way["waterway"="river"](${bboxStr(BBOX)});` +
+    `node["place"~"^(suburb|neighbourhood|quarter|town|village|hamlet)$"](${bboxStr(BBOX)});` +
+    `way["building"](${bboxStr(BBOX_BUILDINGS)});` +
+    `);out geom qt;`;
 
   /* --------------------------- IndexedDB cache --------------------------- */
   function idbOpen() {
@@ -307,24 +317,33 @@ const OSM = (() => {
 
   async function fetchOverpass(query, label, onStatus, mirrors, maxMs) {
     let lastErr = null;
+    const totalDeadline = Date.now() + maxMs;
     for (const url of mirrors) {
       if (liveAborted) throw new Error('skipped by user');
+      if (Date.now() > totalDeadline) break;
       const ctl = new AbortController();
       liveControllers.add(ctl);
       const started = Date.now();
+      let gotBytes = false;
       let lastProgress = started;
-      // give up if nothing has arrived for 25 s, or the budget is spent
+      // The server may legitimately compute for a long while before the first
+      // byte (Overpass queues requests), so be patient up front — but once
+      // data is flowing, a long silence means the connection is dead.
       const watchdog = setInterval(() => {
-        if (Date.now() - lastProgress > 25000 || Date.now() - started > maxMs) ctl.abort();
+        const silence = Date.now() - lastProgress;
+        if ((gotBytes && silence > 30000) ||
+            (!gotBytes && silence > 60000) ||
+            Date.now() > totalDeadline) ctl.abort();
       }, 1000);
       try {
-        onStatus(`${label} — contacting ${new URL(url).host}…`);
+        const host = new URL(url).host;
+        onStatus(`${label} — asking ${host} (can take up to a minute)…`);
         const resp = await fetch(url, {
           method: 'POST',
           body: new URLSearchParams({ data: query }),
           signal: ctl.signal,
         });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status} from ${host}`);
         // Stream the body so we can show download progress (payloads are MBs).
         const reader = resp.body && resp.body.getReader ? resp.body.getReader() : null;
         let text;
@@ -334,6 +353,7 @@ const OSM = (() => {
             const { done, value } = await reader.read();
             if (done) break;
             chunks.push(value); received += value.length;
+            gotBytes = true;
             lastProgress = Date.now();
             onStatus(`${label} — downloading ${(received / 1048576).toFixed(1)} MB…`);
           }
@@ -346,6 +366,7 @@ const OSM = (() => {
         onStatus(`${label} — parsing…`);
         const json = JSON.parse(text);
         if (!json.elements) throw new Error('no elements in response');
+        if (!json.elements.length && json.remark) throw new Error(json.remark);
         return json;
       } catch (e) {
         lastErr = e;
@@ -497,26 +518,22 @@ const OSM = (() => {
 
     liveAborted = false;
     try {
-      const roadsJson = await fetchOverpass(Q_ROADS, 'Real road network of Duhok', onStatus, mirrors, 70000);
-      const roads = parseRoads(roadsJson);
+      const json = await fetchOverpass(Q_ALL, 'Real map of Duhok', onStatus, mirrors, 150000);
+      onStatus('Sorting roads, buildings & areas…');
+      // split the combined response by tags
+      const roadEls = [], areaEls = [], buildingEls = [], placeEls = [];
+      for (const el of json.elements) {
+        const t = el.tags || {};
+        if (t.highway) roadEls.push(el);
+        else if (t.building) buildingEls.push(el);
+        else if (t.place) placeEls.push(el);
+        else areaEls.push(el);
+      }
+      const roads = parseRoads({ elements: roadEls });
       if (roads.length < 30) throw new Error('suspiciously little road data');
-
-      // Roads (the important part) are in hand — the extras below are each
-      // optional, so a skip/failure just means we go on without them.
-      let areas = { waters: [], greens: [], rivers: [] };
-      try {
-        areas = parseAreas(await fetchOverpass(Q_AREAS, 'Dam lake, parks & rivers', onStatus, mirrors, 35000));
-      } catch (e) { console.warn('areas fetch failed', e); }
-
-      let buildings = [];
-      try {
-        buildings = parseBuildings(await fetchOverpass(Q_BUILDINGS, 'Real buildings', onStatus, mirrors, 70000));
-      } catch (e) { console.warn('buildings fetch failed', e); }
-
-      let places = [];
-      try {
-        places = parsePlaces(await fetchOverpass(Q_PLACES, 'District & area names', onStatus, mirrors, 25000));
-      } catch (e) { console.warn('places fetch failed', e); }
+      const areas = parseAreas({ elements: areaEls });
+      const buildings = parseBuildings({ elements: buildingEls });
+      const places = parsePlaces({ elements: placeEls });
 
       const city = {
         source: 'osm',
@@ -3035,7 +3052,7 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     // on the download automatically and use the bundled map.
     const skipBtn = $('skipbtn');
     const skipTimer = setTimeout(() => { skipBtn.style.display = 'inline-block'; }, 6000);
-    const giveUpTimer = setTimeout(() => { OSM.skipLive(); }, 90000);
+    const giveUpTimer = setTimeout(() => { OSM.skipLive(); }, 160000);
     skipBtn.onclick = () => {
       skipBtn.disabled = true;
       status('Skipping the download — using the offline map…');
@@ -3099,7 +3116,8 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     } else {
       badge.textContent = '⚠ Offline map (approximate) — open with internet for the real streets';
     }
-    $('attribution').textContent = city.attribution || '';
+    $('attribution').textContent = (city.attribution || '') +
+      (city.offlineReason ? ` — download failed: ${city.offlineReason}` : '');
 
     $('load-row').style.display = 'none';
     const btn = $('startbtn');
