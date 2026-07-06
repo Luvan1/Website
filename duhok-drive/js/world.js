@@ -538,13 +538,19 @@ const WORLD = (() => {
     scene.add(accToMesh(gAcc, MAT.vcBasic));
   }
 
+  // Custom real places sent in by the player (photo + exact coordinates).
+  // They render like landmarks but without labels/map dots.
+  const CUSTOM_SITES = [
+    { name: '', kind: 'villa1', lat: 36.86233, lon: 42.96075, verified: true },
+  ];
+
   // keep generated/real filler buildings out of the landmark sites
   const LANDMARK_CLEAR_R = {
     dam: 360, stadium: 175, university: 120, park: 130, bazaar: 115,
-    mall: 95, dream: 140, gorge: 30, kiosk: 26,
+    mall: 95, dream: 140, gorge: 30, kiosk: 26, villa1: 20,
   };
   function landmarkClearZones() {
-    return OSM.LANDMARKS.map(lm => {
+    return OSM.LANDMARKS.concat(CUSTOM_SITES).map(lm => {
       const q = OSM.project(lm.lat, lm.lon);
       return { x: q.x, z: q.z, r: LANDMARK_CLEAR_R[lm.kind] || 60 };
     });
@@ -831,6 +837,52 @@ const WORLD = (() => {
     return mesh;
   }
 
+  // ornate laser-cut metal screen (interlocking circles), as on Duhok villas
+  let _laceTex = null;
+  function laceTex() {
+    if (_laceTex) return _laceTex;
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 128;
+    const ctx = cv.getContext('2d');
+    ctx.strokeStyle = 'rgba(248,246,240,0.95)';
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    for (let i = 0; i < 46; i++) {
+      ctx.lineWidth = rnd(2.5, 4.5);
+      ctx.beginPath();
+      ctx.arc(rnd(0, 256), rnd(0, 128), rnd(7, 22), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    _laceTex = new THREE.CanvasTexture(cv);
+    _laceTex.wrapS = _laceTex.wrapT = THREE.RepeatWrapping;
+    return _laceTex;
+  }
+  function lacePanel(w, h) {
+    const mat = new THREE.MeshBasicMaterial({ map: laceTex(), transparent: true, side: THREE.DoubleSide });
+    return new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+  }
+
+  // beige circle-mosaic paving (entrance aprons/steps)
+  let _mosaicTex = null;
+  function mosaicTex() {
+    if (_mosaicTex) return _mosaicTex;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 256;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#cbbfa8';
+    ctx.fillRect(0, 0, 256, 256);
+    for (const [cx, cy] of [[64, 64], [192, 64], [64, 192], [192, 192], [128, 128]]) {
+      for (let r = 8; r < 60; r += 9) {
+        ctx.strokeStyle = r % 18 === 8 ? '#8f8163' : '#b5a88c';
+        ctx.lineWidth = 5;
+        ctx.setLineDash([6, 3]);
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+    _mosaicTex = new THREE.CanvasTexture(cv);
+    _mosaicTex.wrapS = _mosaicTex.wrapT = THREE.RepeatWrapping;
+    return _mosaicTex;
+  }
+
   // transparent text decal (e.g. wall calligraphy)
   function makeDecal(text, color, w, h) {
     const cv = document.createElement('canvas');
@@ -864,6 +916,30 @@ const WORLD = (() => {
     m.position.set(x, y, z);
     g.add(m);
     return m;
+  }
+
+  // exact collision for a local rectangle inside a Y-rotated landmark group
+  function addRotCol(colHash, p, ang, cx, cz, w, d) {
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const poly = [];
+    for (const [lx, lz] of [[cx - w / 2, cz - d / 2], [cx + w / 2, cz - d / 2],
+                            [cx + w / 2, cz + d / 2], [cx - w / 2, cz + d / 2]]) {
+      poly.push(p.x + lx * ca + lz * sa, p.z - lx * sa + lz * ca);
+    }
+    const xs = [poly[0], poly[2], poly[4], poly[6]], zs = [poly[1], poly[3], poly[5], poly[7]];
+    colHash.addBox(Math.min(...xs), Math.min(...zs), Math.max(...xs), Math.max(...zs), poly);
+  }
+
+  function faceStreet(g, p, roadIndex) {
+    if (!roadIndex) return;
+    const near = roadIndex.nearest(p.x, p.z, 60);
+    if (!near) return;
+    const s = near.seg;
+    const t = Math.max(0, Math.min(1,
+      ((p.x - s.ax) * (s.bx - s.ax) + (p.z - s.az) * (s.bz - s.az)) /
+      (((s.bx - s.ax) ** 2 + (s.bz - s.az) ** 2) || 1)));
+    const qx = s.ax + (s.bx - s.ax) * t, qz = s.az + (s.bz - s.az) * t;
+    g.rotation.y = Math.atan2(qx - p.x, qz - p.z);
   }
 
   function buildLandmark(lm, colHash, roadIndex) {
@@ -1105,18 +1181,7 @@ const WORLD = (() => {
         const cone2 = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.62, 10), lambert(0x22242a));
         cone2.position.set(-2.2, 0.31, 4.5); g.add(cone2);
         box(g, 0.7, 0.9, 0.06, 0x1c1e22, 3.5, 1.0, 3.4, 0.3);  // menu blackboard
-        // face the nearest street
-        if (roadIndex) {
-          const near = roadIndex.nearest(p.x, p.z, 60);
-          if (near) {
-            const s = near.seg;
-            const t = Math.max(0, Math.min(1,
-              ((p.x - s.ax) * (s.bx - s.ax) + (p.z - s.az) * (s.bz - s.az)) /
-              (((s.bx - s.ax) ** 2 + (s.bz - s.az) ** 2) || 1)));
-            const qx = s.ax + (s.bx - s.ax) * t, qz = s.az + (s.bz - s.az) * t;
-            g.rotation.y = Math.atan2(qx - p.x, qz - p.z);
-          }
-        }
+        faceStreet(g, p, roadIndex);
         addCol(9, 9);           // square cover regardless of rotation
         labelH = 10;
         break;
@@ -1128,13 +1193,90 @@ const WORLD = (() => {
         labelH = 26;
         break;
       }
+      case 'villa1': {
+        // two-storey white stone villa, modelled from the player's photo:
+        // central bay with triangular pediment, ornate circle-lace metal
+        // screens, mosaic entrance paving, olive tree at the gate
+        const stone = 0xefe9dd, trim = 0xf7f3ea, glass = 0x2a3138;
+        // main body: 12 m wide, 10 m deep, two floors
+        box(g, 12, 3.7, 10, stone, 0, 1.85, 0);
+        box(g, 12.3, 0.35, 10.3, trim, 0, 3.85, 0);              // floor band
+        box(g, 12, 3.5, 10, stone, 0, 5.85, 0);
+        box(g, 12.3, 0.45, 10.3, trim, 0, 7.7, 0);               // roof cornice
+        // central projecting entrance bay + pediment
+        box(g, 4.2, 7.6, 1.5, stone, 0, 3.8, 5.2);
+        const ped = new THREE.BoxGeometry(5.0, 1.7, 1.7);
+        {
+          const pp = ped.attributes.position;
+          for (let i = 0; i < pp.count; i++) if (pp.getY(i) > 0) pp.setX(i, pp.getX(i) * 0.04);
+          ped.computeVertexNormals();
+        }
+        const pedm = new THREE.Mesh(ped, lambert(trim));
+        pedm.position.set(0, 8.6, 5.15); g.add(pedm);
+        box(g, 1.1, 1.1, 0.15, glass, 0, 6.1, 5.99);             // small bay window
+        // front door (dark, ornate) + frame
+        box(g, 1.7, 2.7, 0.2, 0x2b2119, 0, 1.35, 5.99);
+        box(g, 2.2, 0.25, 0.3, trim, 0, 2.82, 5.99);
+        const doorLace = lacePanel(1.5, 2.4);
+        doorLace.position.set(0, 1.35, 6.12); g.add(doorLace);
+        // windows: two per floor each side, white sills, dark glass
+        for (const wx of [-3.6, 3.6]) {
+          for (const wy of [1.9, 5.6]) {
+            box(g, 2.0, 2.0, 0.14, glass, wx, wy, 5.03);
+            box(g, 2.4, 0.18, 0.4, trim, wx, wy - 1.12, 5.05);   // sill
+            if (wy > 3) {                                        // balconette lace
+              const lp = lacePanel(2.3, 1.0);
+              lp.position.set(wx, wy - 1.0, 5.35); g.add(lp);
+              box(g, 2.4, 0.08, 0.08, trim, wx, wy - 0.52, 5.38);
+            }
+          }
+          // wall lamps
+          box(g, 0.16, 0.28, 0.12, 0xfff2c8, wx + 1.35, 2.2, 5.06);
+        }
+        // boundary wall with lace screens and driveway gap (right side)
+        const wallSegs = [];
+        for (const seg of [[-7.0, -1.6], [1.2, 7.0]]) {
+          const cx = (seg[0] + seg[1]) / 2, w = seg[1] - seg[0];
+          box(g, w, 1.0, 0.25, stone, cx, 0.5, 7.6);
+          const lp = lacePanel(w - 0.2, 0.75);
+          lp.position.set(cx, 1.35, 7.6); g.add(lp);
+          wallSegs.push([cx, 7.6, w, 0.35]);
+        }
+        // mosaic entrance apron + two steps
+        const apron = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 3.4),
+          new THREE.MeshLambertMaterial({ map: mosaicTex() }));
+        apron.rotation.x = -Math.PI / 2;
+        apron.position.set(-0.1, 0.08, 7.4); g.add(apron);
+        box(g, 3.2, 0.18, 0.9, 0xc2b598, 0, 0.09, 6.5);
+        box(g, 2.8, 0.36, 0.6, 0xbcae90, 0, 0.18, 6.15);
+        // olive tree inside the wall (left of the entrance)
+        cyl(g, 0.16, 0.22, 2.2, 0x5c4630, -3.1, 1.1, 6.7, 7);
+        for (const [tx, ty, tz, tr] of [[-3.1, 3.0, 6.7, 1.5], [-2.4, 2.6, 6.9, 1.0], [-3.7, 2.5, 6.5, 0.9]]) {
+          const crown = new THREE.Mesh(new THREE.SphereGeometry(tr, 8, 6), lambert(0x4a5c33));
+          crown.position.set(tx, ty, tz); g.add(crown);
+        }
+        // grey wheelie bin at the kerb + rooftop water tank & AC units
+        box(g, 0.6, 1.0, 0.6, 0x6f7377, 3.4, 0.5, 8.6);
+        cyl(g, 0.6, 0.6, 1.2, 0xe8e8e4, -3.5, 8.2, -2.5, 9);
+        box(g, 0.7, 0.5, 0.35, 0xe0e0dc, 5.2, 4.4, 3.2);
+        box(g, 0.7, 0.5, 0.35, 0xe0e0dc, 5.2, 1.9, 3.2);
+        faceStreet(g, p, roadIndex);
+        // rotation-aware collisions: house body + wall segments (the gate
+        // gap stays open so you can walk into the courtyard)
+        addRotCol(colHash, p, g.rotation.y, 0, 0.2, 12.2, 10.4);
+        for (const [cx, cz, w, d] of wallSegs) addRotCol(colHash, p, g.rotation.y, cx, cz, w, d);
+        labelH = 0;
+        break;
+      }
     }
 
-    const label = makeLabelSprite(lm.name, lm.verified ? '' : '(approximate location)');
-    label.position.y = labelH;
-    g.add(label);
+    if (lm.name) {
+      const label = makeLabelSprite(lm.name, lm.verified ? '' : '(approximate location)');
+      label.position.y = labelH;
+      g.add(label);
+      g.userData.label = label;
+    }
     g.userData.landmark = lm;
-    g.userData.label = label;
     return g;
   }
 
@@ -1282,7 +1424,7 @@ const WORLD = (() => {
     buildRoofClutter(scene, roofSpots);
 
     const landmarkGroups = [];
-    for (const lm of OSM.LANDMARKS) {
+    for (const lm of OSM.LANDMARKS.concat(CUSTOM_SITES)) {
       const grp = buildLandmark(lm, colHash, roadIndex);
       landmarkGroups.push(grp);
       scene.add(grp);
