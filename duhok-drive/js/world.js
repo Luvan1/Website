@@ -143,9 +143,25 @@ const WORLD = (() => {
   })(20260704);
 
   /* ------------------------------- terrain ------------------------------ */
-  // Raw geological height: valley floor at 0, White Mountain (Bêxêr) ridge to
-  // the north, Zawa ridge to the south with the Gali Duhok gorge cut through,
-  // and the raised bowl that holds the dam lake.
+  // Large-scale city elevation: Duhok is NOT flat — the city climbs towards
+  // the northern foothills, falls away south through the gorge, sits higher
+  // in the east and rolls gently everywhere.  Roads, buildings, traffic and
+  // the car all follow this base surface, so streets go up and down.
+  function cityBase(x, z) {
+    const smooth = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+    let h = 0;
+    h += 55 * smooth((-z - 200) / 2600);    // climb towards the north foothills
+    h += 30 * smooth((-z - 2000) / 1300);   // steeper final rise (Masike / dam side)
+    h -= 24 * smooth((z - 1200) / 2600);    // falls away south through the gorge
+    h += 14 * smooth((x - 1800) / 3000);    // eastern districts sit higher
+    h -= 10 * smooth((-x - 3500) / 3000);   // west towards Semel is lower
+    h += 7 * Math.sin(x * 0.00085 + 0.8) * Math.sin(z * 0.001 + 1.7);  // rolling streets
+    return h;
+  }
+  // Base surface used while building geometry (set in buildWorld)
+  let BASE = cityBase;
+
+  // Extra geological relief above the base: the ridges and the dam bowl.
   function rawHeight(x, z) {
     const smooth = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
     let h = 0;
@@ -298,10 +314,11 @@ const WORLD = (() => {
       const len = Math.hypot(dx, dz) || 1;
       dx /= len; dz /= len;
       if (i > 0) vDist += Math.hypot(x - x0, z - z0) / (w || 1);
-      // perpendicular (left of travel direction)
+      // perpendicular (left of travel direction); follows the base surface
+      const yy = BASE(x, z) + y;
       const px = -dz, pz = dx;
-      const L = [x + px * hw, y, z + pz * hw];
-      const R = [x - px * hw, y, z - pz * hw];
+      const L = [x + px * hw, yy, z + pz * hw];
+      const R = [x - px * hw, yy, z - pz * hw];
       if (prevL) {
         pushQuad(acc, prevL, prevR, R, L, col,
           [[0, prevV], [1, prevV], [1, vDist], [0, vDist]]);
@@ -325,10 +342,11 @@ const WORLD = (() => {
         const step = Math.min(want, segLen);
         const nx = ax + ux * step, nz = az + uz * step;
         if (drawing) {
+          const ya = BASE(ax, az) + y, yn = BASE(nx, nz) + y;
           const px = -uz * w / 2, pz = ux * w / 2;
           pushQuad(acc,
-            [ax + px, y, az + pz], [ax - px, y, az - pz],
-            [nx - px, y, nz - pz], [nx + px, y, nz + pz], col);
+            [ax + px, ya, az + pz], [ax - px, ya, az - pz],
+            [nx - px, yn, nz - pz], [nx + px, yn, nz + pz], col);
         }
         carry += step; segLen -= step;
         ax = nx; az = nz;
@@ -353,18 +371,21 @@ const WORLD = (() => {
     return out;
   }
 
-  function pushPolygon(acc, poly, y, col, uvConst) {
+  // mode 'abs': y is absolute (flat water surfaces, building roofs)
+  // mode 'rel': y is an offset above the base surface (parks, greens)
+  function pushPolygon(acc, poly, y, col, uvConst, mode) {
     const contour = [];
     for (let i = 0; i < poly.length; i += 2) contour.push(new THREE.Vector2(poly[i], poly[i + 1]));
     if (contour.length < 3) return;
     let tris;
     try { tris = THREE.ShapeUtils.triangulateShape(contour, []); }
     catch (e) { return; }
+    const yOf = (v) => mode === 'rel' ? BASE(v.x, v.y) + y : y;
     for (const t of tris) {
       pushTri(acc,
-        contour[t[0]].x, y, contour[t[0]].y,
-        contour[t[1]].x, y, contour[t[1]].y,
-        contour[t[2]].x, y, contour[t[2]].y,
+        contour[t[0]].x, yOf(contour[t[0]]), contour[t[0]].y,
+        contour[t[1]].x, yOf(contour[t[1]]), contour[t[1]].y,
+        contour[t[2]].x, yOf(contour[t[2]]), contour[t[2]].y,
         col[0], col[1], col[2]);
       if (uvConst) acc.uv.push(uvConst[0], uvConst[1], uvConst[0], uvConst[1], uvConst[0], uvConst[1]);
     }
@@ -409,16 +430,17 @@ const WORLD = (() => {
     // Effective height: geological height flattened near roads so the whole
     // drivable network stays level (roads are rendered at y≈0).
     return function heightAt(x, z) {
-      const raw = rawHeight(x, z);
-      // NB: negative valley dips must be flattened near roads too, otherwise
-      // the car sinks below the road surface
-      if (raw > -0.05 && raw < 0.4) return raw;
+      const base = cityBase(x, z);
+      const extra = rawHeight(x, z);
+      // extra relief (ridges, dips) is flattened near roads so the drivable
+      // network sits exactly on the base surface
+      if (extra > -0.05 && extra < 0.4) return base + extra;
       const near = roadIndex.nearest(x, z, 150);
-      if (!near) return raw;
+      if (!near) return base + extra;
       const d = near.d;
       const t = (d - 28) / 110;
       const f = t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
-      return raw * f;
+      return base + extra * f;
     };
   }
 
@@ -439,10 +461,12 @@ const WORLD = (() => {
       }
       pos.setX(i, x); pos.setZ(i, z);
       pos.setY(i, h - 0.35);        // tucked slightly under the roads
-      // colour by elevation: dry valley floor → olive foothills → pale rock
-      if (h < 6) c.setHex(0x9b8f6a).offsetHSL(0, 0, _rng() * 0.03 - 0.015);
-      else if (h < 60) c.setHex(0x8a8256);
-      else if (h < 180) c.setHex(0x97846a);
+      // colour by relief above the city surface: valley floor → olive
+      // foothills → pale rock
+      const hr = h - cityBase(x, z);
+      if (hr < 6) c.setHex(0x9b8f6a).offsetHSL(0, 0, _rng() * 0.03 - 0.015);
+      else if (hr < 60) c.setHex(0x8a8256);
+      else if (hr < 180) c.setHex(0x97846a);
       else c.setHex(0xcfc5b3);
       colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
     }
@@ -501,14 +525,14 @@ const WORLD = (() => {
   function buildWaterAndGreens(scene, city, waterInfos) {
     const acc = makeAcc(), gAcc = makeAcc();
     for (const wi of waterInfos) {
-      // the dam lake reads as deep turquoise in real photos
-      pushPolygon(acc, wi.poly, wi.y, lin([0.13, 0.47, 0.52]));
+      // the dam lake reads as deep turquoise in real photos (flat surface)
+      pushPolygon(acc, wi.poly, wi.y, lin([0.13, 0.47, 0.52]), null, 'abs');
     }
     for (const rv of city.rivers || []) {
       pushRibbon(acc, rv, 8, 0.03, lin([0.2, 0.45, 0.62]));
     }
     for (const g of city.greens || []) {
-      pushPolygon(gAcc, g, 0.028, lin([0.32, 0.45, 0.22]));
+      pushPolygon(gAcc, g, 0.028, lin([0.32, 0.45, 0.22]), null, 'rel');
     }
     scene.add(accToMesh(acc, MAT.vcBasic));
     scene.add(accToMesh(gAcc, MAT.vcBasic));
@@ -556,7 +580,12 @@ const WORLD = (() => {
       if (n < 3) continue;
       if (kioskZones.length && inClearZone(kioskZones, poly[0], poly[1])) continue;
       const base = BUILDING_PALETTE[(Math.floor(poly[0] * 13.7) & 1048575) % BUILDING_PALETTE.length];
-      const h = b.h;
+      const bb = polyBounds(poly);
+      // building sits on the base surface at its centre (slightly sunk so
+      // sloped ground never leaves a floating corner)
+      const y0 = BASE((bb.x0 + bb.x1) / 2, (bb.z0 + bb.z1) / 2) - 0.4;
+      const h = b.h + 0.4;
+      const yTop = y0 + h;
       // walls (window texture repeats every ~10 m / 3 floors)
       let doorWall = null, doorLen = 0;
       for (let i = 0; i < n; i++) {
@@ -569,7 +598,7 @@ const WORLD = (() => {
         const col = [base[0] * lum, base[1] * lum, base[2] * lum];
         const wl = Math.hypot(bx - ax, bz - az);
         const u1 = Math.max(0.35, wl / 10), v1 = Math.max(0.4, h / 9.5);
-        pushQuad(acc, [ax, 0, az], [bx, 0, bz], [bx, h, bz], [ax, h, az], col,
+        pushQuad(acc, [ax, y0, az], [bx, y0, bz], [bx, yTop, bz], [ax, yTop, az], col,
           [[0, 0], [u1, 0], [u1, v1], [0, v1]]);
         if (wl > doorLen) { doorLen = wl; doorWall = { ax, az, bx, bz, nx, nz }; }
       }
@@ -577,30 +606,30 @@ const WORLD = (() => {
       if (doorWall && doorLen > 4) {
         const { ax, az, bx, bz, nx, nz } = doorWall;
         const mx = (ax + bx) / 2, mz = (az + bz) / 2;
+        const dy = BASE(mx, mz);
         const ux = (bx - ax) / doorLen, uz = (bz - az) / doorLen;
         const dw = 0.7, dh = 2.3, off = 0.06;
         pushQuad(acc,
-          [mx - ux * dw + nx * off, 0, mz - uz * dw + nz * off],
-          [mx + ux * dw + nx * off, 0, mz + uz * dw + nz * off],
-          [mx + ux * dw + nx * off, dh, mz + uz * dw + nz * off],
-          [mx - ux * dw + nx * off, dh, mz - uz * dw + nz * off],
+          [mx - ux * dw + nx * off, dy, mz - uz * dw + nz * off],
+          [mx + ux * dw + nx * off, dy, mz + uz * dw + nz * off],
+          [mx + ux * dw + nx * off, dy + dh, mz + uz * dw + nz * off],
+          [mx - ux * dw + nx * off, dy + dh, mz - uz * dw + nz * off],
           doorCol, [[0.02, 0.02], [0.02, 0.02], [0.02, 0.02], [0.02, 0.02]]);
       }
       // roof (samples the plain corner of the window tile) + parapet lip
-      pushPolygon(acc, poly, h, [base[0] * 0.55, base[1] * 0.55, base[2] * 0.55], [0.02, 0.02]);
+      pushPolygon(acc, poly, yTop, [base[0] * 0.55, base[1] * 0.55, base[2] * 0.55], [0.02, 0.02], 'abs');
       for (let i = 0; i < n; i++) {
         const j = (i + 1) % n;
         pushQuad(acc,
-          [poly[i * 2], h, poly[i * 2 + 1]], [poly[j * 2], h, poly[j * 2 + 1]],
-          [poly[j * 2], h + 0.5, poly[j * 2 + 1]], [poly[i * 2], h + 0.5, poly[i * 2 + 1]],
+          [poly[i * 2], yTop, poly[i * 2 + 1]], [poly[j * 2], yTop, poly[j * 2 + 1]],
+          [poly[j * 2], yTop + 0.5, poly[j * 2 + 1]], [poly[i * 2], yTop + 0.5, poly[i * 2 + 1]],
           [base[0] * 0.7, base[1] * 0.7, base[2] * 0.7],
           [[0.02, 0.02], [0.02, 0.02], [0.02, 0.02], [0.02, 0.02]]);
       }
       // rooftop clutter spot (water tanks & dishes are everywhere in Duhok)
-      const bb = polyBounds(poly);
       if (bi % 3 !== 2 && roofSpots.length < 9000) {
         const cx = (bb.x0 + bb.x1) / 2, cz = (bb.z0 + bb.z1) / 2;
-        if (pointInPoly(cx, cz, poly)) roofSpots.push({ x: cx, z: cz, h, s: bi });
+        if (pointInPoly(cx, cz, poly)) roofSpots.push({ x: cx, z: cz, h: yTop, s: bi });
       }
       // exact-footprint collision (no invisible AABB corners)
       if (bb.x1 - bb.x0 < 120 && bb.z1 - bb.z0 < 120) colHash.addBox(bb.x0, bb.z0, bb.x1, bb.z1, poly);
@@ -680,8 +709,9 @@ const WORLD = (() => {
             let h = 3.6 + _rng() * 3.4;
             if (distC < 900) h = 6 + _rng() * 9;         // taller downtown
             const ang = -Math.atan2(uz, ux);
+            const by = BASE(cx, cz) - 0.3;
             m4.makeRotationY(ang);
-            m4.setPosition(cx, 0, cz);
+            m4.setPosition(cx, by, cz);
             m4.elements[0] *= w; m4.elements[2] *= w;
             m4.elements[8] *= dep; m4.elements[10] *= dep;
             m4.elements[5] = h;
@@ -699,7 +729,7 @@ const WORLD = (() => {
             }
             const bxs = [poly[0], poly[2], poly[4], poly[6]], bzs = [poly[1], poly[3], poly[5], poly[7]];
             colHash.addBox(Math.min(...bxs), Math.min(...bzs), Math.max(...bxs), Math.max(...bzs), poly);
-            if (idx % 3 === 0 && roofSpots.length < 11000) roofSpots.push({ x: cx, z: cz, h, s: idx });
+            if (idx % 3 === 0 && roofSpots.length < 11000) roofSpots.push({ x: cx, z: cz, h: by + h, s: idx });
             idx++;
           }
         }
@@ -839,7 +869,7 @@ const WORLD = (() => {
   function buildLandmark(lm, colHash, roadIndex) {
     const g = new THREE.Group();
     const p = OSM.project(lm.lat, lm.lon);
-    g.position.set(p.x, 0, p.z);
+    g.position.set(p.x, BASE(p.x, p.z) - 0.15, p.z);
     const addCol = (w, d, x = 0, z = 0) =>
       colHash.addBox(p.x + x - w / 2, p.z + z - d / 2, p.x + x + w / 2, p.z + z + d / 2);
     let labelH = 40;
@@ -1191,7 +1221,8 @@ const WORLD = (() => {
       const axis = Math.abs(ux) > Math.abs(uz) ? 'ew' : 'ns';
       const g = new THREE.Group();
       // pole at the right-hand kerb, head facing oncoming traffic
-      g.position.set(sig.x - uz * (cls.w / 2 + 1.0), 0, sig.z + ux * (cls.w / 2 + 1.0));
+      const sx = sig.x - uz * (cls.w / 2 + 1.0), sz = sig.z + ux * (cls.w / 2 + 1.0);
+      g.position.set(sx, BASE(sx, sz), sz);
       g.rotation.y = Math.atan2(ux, uz) + Math.PI;
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 4.6, 8), poleMat);
       pole.position.y = 2.3;
@@ -1270,7 +1301,7 @@ const WORLD = (() => {
     {
       const fx = -400, fz = -4150;
       const flag = makeKurdistanFlag(260, 160);
-      flag.position.set(fx, rawHeight(fx, fz) + 20, fz);
+      flag.position.set(fx, cityBase(fx, fz) + rawHeight(fx, fz) + 20, fz);
       flag.rotation.x = -0.42;         // leant back against the slope
       scene.add(flag);
     }
@@ -1280,6 +1311,7 @@ const WORLD = (() => {
 
     return {
       heightAt,
+      baseAt: cityBase,
       roadIndex,
       collisions: colHash,
       landmarks: landmarkGroups,

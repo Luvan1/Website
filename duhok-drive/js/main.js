@@ -176,10 +176,10 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       if (nearKiosk()) toast('Get out first (F) — the kiosk serves you on foot ☕');
       return;
     }
-    if (!nearKiosk()) { toast('Walk up to the VT kiosk window to order ☕'); return; }
+    if (!nearKiosk()) { toast('Walk up to the كوپ kiosk window to order ☕'); return; }
     player.coffeeUntil = performance.now() + COFFEE_MS;
     player.ped.cup.visible = true;
-    toast('☕ One coffee from VT — enjoy!');
+    toast('☕ One coffee from كوپ — enjoy!');
   }
 
   function resetToRoad() {
@@ -243,7 +243,7 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     const road = world.nearestRoad(p.x, p.z, 160);
     p.offroad = !road || road.d > road.halfW + 2.0;
     const th = world.heightAt(p.x, p.z);
-    p.y = p.offroad ? th : Math.max(th, 0.17);
+    p.y = p.offroad ? th : Math.max(th, world.baseAt(p.x, p.z) + 0.17);
     p.roadName = road && road.d < road.halfW + 12 ? road.name : '';
 
     // pedestrian mesh + walk cycle
@@ -282,6 +282,12 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     if (input.hand) a -= Math.sign(p.v) * 6.5;
     // drag + rolling resistance
     a -= Math.sign(p.v) * (0.0004 * p.v * p.v * 9 + 0.35);
+    // gravity along the street slope: climbing slows you, descents pull you
+    const fxg = Math.sin(p.heading), fzg = Math.cos(p.heading);
+    const grade = (world.baseAt(p.x + fxg * 4, p.z + fzg * 4) -
+                   world.baseAt(p.x - fxg * 4, p.z - fzg * 4)) / 8;
+    a -= 9.81 * grade * 0.6;
+    p.grade = grade;
 
     // --- off-road handling
     const road = world.nearestRoad(p.x, p.z, 160);
@@ -353,16 +359,16 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
 
     // --- ground height: ride ON the asphalt when on a road, terrain otherwise
     const th = world.heightAt(p.x, p.z);
-    p.y = p.offroad ? th : Math.max(th, 0.17);
+    p.y = p.offroad ? th : Math.max(th, world.baseAt(p.x, p.z) + 0.17);
 
     // --- car mesh
     const g = p.car.group;
     g.position.set(p.x, p.y, p.z);
     g.rotation.y = p.heading;
-    // body lean + off-road bumping
+    // body lean + street slope pitch + off-road bumping
     const bump = p.offroad && p.speed > 3 ? (Math.random() - 0.5) * 0.02 : 0;
     g.rotation.z = clamp(-yaw * p.v * 0.012, -0.06, 0.06) + bump;
-    g.rotation.x = clamp(-(a) * 0.004, -0.04, 0.05);
+    g.rotation.x = clamp(-(a) * 0.004, -0.04, 0.05) - Math.atan(p.grade || 0);
     // wheels
     p.wheelSpin += (p.v / 0.393) * dt;
     for (const w of p.car.wheels) {
@@ -376,13 +382,15 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
 
   /* ------------------------------- camera -------------------------------- */
   const CAMS = [
-    { d: 11.5, h: 4.4, look: 7, fov: 62 },   // chase
-    { d: 7.6, h: 3.0, look: 5, fov: 65 },    // close chase
-    { d: -0.4, h: 2.05, look: 30, fov: 70 }, // hood
+    { d: 11.5, h: 4.4, look: 7, fov: 62 },           // chase
+    { d: 7.6, h: 3.0, look: 5, fov: 65 },            // close chase
+    { d: -9.0, h: 2.8, fov: 62, front: true },       // front view (see the car)
+    { d: -0.4, h: 2.05, look: 30, fov: 70, hood: true },
   ];
   const WALK_CAMS = [
-    { d: 4.6, h: 2.3, look: 5, fov: 60 },    // over the shoulder
-    { d: 2.5, h: 1.95, look: 8, fov: 60 },   // close
+    { d: 4.6, h: 2.3, look: 5, fov: 60 },            // over the shoulder
+    { d: 2.5, h: 1.95, look: 8, fov: 60 },           // close
+    { d: -3.8, h: 1.75, fov: 58, front: true },      // front view (see yourself)
   ];
   function activeCams() { return player.mode === 'walk' ? WALK_CAMS : CAMS; }
   function cycleCamera() { player.camMode = (player.camMode + 1) % activeCams().length; }
@@ -391,8 +399,8 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     const p = player, c = activeCams()[p.camMode % activeCams().length];
     const fx = Math.sin(p.heading), fz = Math.cos(p.heading);
     const tx = p.x - fx * c.d, tz = p.z - fz * c.d;
-    const ty = p.y + c.h + (c.d > 0 ? Math.max(0, world.heightAt(tx, tz) - p.y) : 0);
-    const k = c.d > 0 ? 1 - Math.exp(-dt * 5) : 1;
+    const ty = p.y + c.h + (!c.hood ? Math.max(0, world.heightAt(tx, tz) - p.y) : 0);
+    const k = c.hood ? 1 : 1 - Math.exp(-dt * 5);
     p.camPos.x += (tx - p.camPos.x) * k;
     p.camPos.y += (ty - p.camPos.y) * k;
     p.camPos.z += (tz - p.camPos.z) * k;
@@ -401,7 +409,12 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
       camera.position.x += (Math.random() - 0.5) * p.shake;
       camera.position.y += (Math.random() - 0.5) * p.shake * 0.6;
     }
-    camera.lookAt(p.x + fx * c.look, p.y + (p.mode === 'walk' ? 1.5 : 1.7), p.z + fz * c.look);
+    if (c.front) {
+      // looking back at the character / the Escalade's grille
+      camera.lookAt(p.x, p.y + (p.mode === 'walk' ? 1.1 : 1.2), p.z);
+    } else {
+      camera.lookAt(p.x + fx * c.look, p.y + (p.mode === 'walk' ? 1.5 : 1.7), p.z + fz * c.look);
+    }
     const targetFov = c.fov + p.speed * 0.18;
     camera.fov += (clamp(targetFov, c.fov, c.fov + 10) - camera.fov) * Math.min(1, dt * 3);
     camera.updateProjectionMatrix();
@@ -752,7 +765,7 @@ window.__DUHOK_BOOTED__ = true;   // index.html checks this to detect missing fi
     const buildAll = () => {
       const nodes = TRAFFIC.prepare(city);
       world = WORLD.buildWorld(scene, city);
-      traffic = TRAFFIC.create(scene, city, nodes, { count: 46, signals: world.signals });
+      traffic = TRAFFIC.create(scene, city, nodes, { count: 46, signals: world.signals, baseAt: world.baseAt });
       initPlayer();
       prerenderMap();
     };

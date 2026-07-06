@@ -53,11 +53,11 @@ const OSM = (() => {
     { id: 'bazaar',   name: 'Grand Bazaar & Mosque',   lat: 36.8585, lon: 42.9930, verified: false, kind: 'bazaar' },
     { id: 'mazi',     name: 'Mazi Mall',               lat: 36.8600, lon: 42.9820, verified: false, kind: 'mall' },
     { id: 'family',   name: 'Family Mall',             lat: 36.8560, lon: 42.9480, verified: false, kind: 'mall' },
-    { id: 'dmall',    name: 'Duhok Mall',              lat: 36.8710, lon: 42.9600, verified: false, kind: 'mall' },
+    { id: 'dmall',    name: 'Duhok Mall',              lat: 36.86668, lon: 42.95762, verified: true, kind: 'mall' },
     { id: 'dream',    name: 'Dream City',              lat: 36.8630, lon: 42.9300, verified: false, kind: 'dream' },
     { id: 'gali',     name: 'Gali Duhok Gorge',        lat: 36.8380, lon: 42.9890, verified: false, kind: 'gorge' },
     // added from the player's photo — exact spot provided
-    { id: 'vtkiosk',  name: 'VT Coffee Kiosk',         lat: 36.86667, lon: 42.95858, verified: true, kind: 'kiosk' },
+    { id: 'vtkiosk',  name: 'كوپ',                     lat: 36.86667, lon: 42.95858, verified: true, kind: 'kiosk' },
   ];
 
   /* Road class table: rendered width (m), AI speed limit (km/h), dual carriageway */

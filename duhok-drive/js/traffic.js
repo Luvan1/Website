@@ -173,6 +173,7 @@ const TRAFFIC = (() => {
     const roads = city.roads;
     const N_CARS = (opts && opts.count) || 46;
     const signals = (opts && opts.signals) || null;
+    const baseAt = (opts && opts.baseAt) || (() => 0);
     const rand = () => Math.random();
 
     // spawn weights: busier main roads
@@ -243,8 +244,12 @@ const TRAFFIC = (() => {
       car.ux = ux; car.uz = uz;
       const h = Math.atan2(ux, uz);
       car.heading = h;
-      car.mesh.position.set(car.x, 0.17, car.z);   // on top of the asphalt layers
+      // ride the base surface (streets go up and down), pitch with the slope
+      const y = baseAt(car.x, car.z);
+      const grade = (baseAt(car.x + ux * 3, car.z + uz * 3) - y) / 3;
+      car.mesh.position.set(car.x, y + 0.17, car.z);
       car.mesh.rotation.y = h;
+      car.mesh.rotation.x = -Math.atan(grade);
     }
 
     function segLen(car) {
