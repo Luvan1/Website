@@ -1343,7 +1343,7 @@ const WORLD = (() => {
   // keep generated/real filler buildings out of the landmark sites
   const LANDMARK_CLEAR_R = {
     dam: 360, stadium: 175, university: 120, park: 130, bazaar: 115,
-    mall: 95, dream: 140, gorge: 30, kiosk: 26, villa1: 20,
+    mall: 95, dream: 140, gorge: 30, kiosk: 26, villa1: 30,
   };
   function landmarkClearZones() {
     return OSM.LANDMARKS.concat(CUSTOM_SITES).map(lm => {
@@ -2057,10 +2057,28 @@ const WORLD = (() => {
         box(g, 0.7, 0.5, 0.35, 0xe0e0dc, 5.2, 4.4, 3.2);
         box(g, 0.7, 0.5, 0.35, 0xe0e0dc, 5.2, 1.9, 3.2);
         faceStreet(g, p, roadIndex);
+        // set the plot back from the street so the boundary wall never
+        // crosses the roadway or the sidewalk strip
+        let pc = { x: g.position.x, z: g.position.z };
+        if (roadIndex) {
+          const near = roadIndex.nearest(p.x, p.z, 90);
+          if (near) {
+            const cls = OSM.ROAD_CLASSES[near.seg.data.cls] || OSM.ROAD_CLASSES.residential;
+            const need = cls.w / 2 + 2.2 + 8.2;   // road edge + sidewalk + front wall
+            if (near.d < need) {
+              const back = need - near.d;
+              const ang = g.rotation.y;
+              g.position.x -= Math.sin(ang) * back;
+              g.position.z -= Math.cos(ang) * back;
+              g.position.y = BASE(g.position.x, g.position.z) - 0.15;
+              pc = { x: g.position.x, z: g.position.z };
+            }
+          }
+        }
         // rotation-aware collisions: house body + wall segments (the gate
         // gap stays open so you can walk into the courtyard)
-        addRotCol(colHash, p, g.rotation.y, 0, 0.2, 12.2, 10.4);
-        for (const [cx, cz, w, d] of wallSegs) addRotCol(colHash, p, g.rotation.y, cx, cz, w, d);
+        addRotCol(colHash, pc, g.rotation.y, 0, 0.2, 12.2, 10.4);
+        for (const [cx, cz, w, d] of wallSegs) addRotCol(colHash, pc, g.rotation.y, cx, cz, w, d);
         labelH = 0;
         break;
       }
