@@ -147,6 +147,40 @@ const WORLD = (() => {
   // the northern foothills, falls away south through the gorge, sits higher
   // in the east and rolls gently everywhere.  Roads, buildings, traffic and
   // the car all follow this base surface, so streets go up and down.
+  // The Duhok Dam crest between the player-verified real endpoints.
+  // Roads climb gently to it (city side), the reservoir sits behind it.
+  const DAM = (() => {
+    const a = OSM.project(36.87576, 43.00753);   // east end of the crest
+    const b = OSM.project(36.87661, 43.00021);   // west end of the crest
+    const dx = b.x - a.x, dz = b.z - a.z;
+    const len = Math.hypot(dx, dz);
+    return {
+      ax: a.x, az: a.z, bx: b.x, bz: b.z,
+      ux: dx / len, uz: dz / len, len,
+      nx: dz / len, nz: -dx / len,   // unit normal towards the city (south)
+      CREST: 68, BED: 50,
+    };
+  })();
+
+  // 0..1: 1 on the crest strip, easing to 0 down the ramps
+  function damCrestFall(x, z) {
+    const dx = DAM.bx - DAM.ax, dz = DAM.bz - DAM.az;
+    let t = ((x - DAM.ax) * dx + (z - DAM.az) * dz) / (DAM.len * DAM.len);
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const qx = DAM.ax + dx * t, qz = DAM.az + dz * t;
+    const d = Math.hypot(x - qx, z - qz);
+    const cross = dx * (z - DAM.az) - dz * (x - DAM.ax);
+    const ramp = cross < 0 ? 560 : 170;   // long gentle climb from the city
+    let u = (d - 25) / ramp;              // flat crest strip 25 m wide
+    u = u < 0 ? 0 : u > 1 ? 1 : u;
+    return 1 - u * u * (3 - 2 * u);
+  }
+  // 0..1 weight of the reservoir basin behind the wall
+  function damLakeWeight(x, z) {
+    const lx = (x - 1500) / 1100, lz = (z + 2900) / 900;
+    return Math.exp(-(lx * lx + lz * lz) / 2);
+  }
+
   function cityBase(x, z) {
     const smooth = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
     let h = 0;
@@ -156,6 +190,12 @@ const WORLD = (() => {
     h += 14 * smooth((x - 1800) / 3000);    // eastern districts sit higher
     h -= 10 * smooth((-x - 3500) / 3000);   // west towards Semel is lower
     h += 7 * Math.sin(x * 0.00085 + 0.8) * Math.sin(z * 0.001 + 1.7);  // rolling streets
+    // Duhok Dam: hold the reservoir basin down behind the wall, then raise
+    // the crest ridge above everything so the road climbs up and over it
+    const lw = damLakeWeight(x, z);
+    if (lw > 0.01) h = h * (1 - lw) + Math.min(h, DAM.BED) * lw;
+    const cf = damCrestFall(x, z);
+    if (cf > 0.001) h = Math.max(h, DAM.CREST * cf);
     return h;
   }
   // Base surface used while building geometry (set in buildWorld)
@@ -181,9 +221,6 @@ const WORLD = (() => {
     // low hills closing the western horizon towards Semel
     const w = smooth((-x - 8200) / 2600);
     h += 160 * w * (0.85 + 0.15 * Math.sin(z * 0.001));
-    // Dam lake bowl (raised ground holding the reservoir)
-    const dx = (x - 1250) / 850, dz = (z + 2560) / 640;
-    h += 26 * Math.exp(-(dx * dx + dz * dz) / 2);
     // gentle rolling of the valley floor far from centre
     h += 2.5 * Math.sin(x * 0.0012 + 2.0) * Math.sin(z * 0.0014);
     return h;
@@ -300,8 +337,36 @@ const WORLD = (() => {
     }
   }
 
+  // Subdivide segments where the base elevation curves (e.g. the dam ramp),
+  // so draped ribbons follow the slope instead of cutting straight through.
+  function densifyForElev(pts) {
+    const out = [pts[0], pts[1]];
+    for (let i = 0; i < pts.length / 2 - 1; i++) {
+      const ax = pts[i * 2], az = pts[i * 2 + 1];
+      const stack = [[ax, az, pts[i * 2 + 2], pts[i * 2 + 3], 0]];
+      const emit = [];
+      while (stack.length) {
+        const [x0, z0, x1, z1, depth] = stack.pop();
+        const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+        const lin2 = (BASE(x0, z0) + BASE(x1, z1)) / 2;
+        if (depth < 5 && Math.hypot(x1 - x0, z1 - z0) > 20 &&
+            Math.abs(BASE(mx, mz) - lin2) > 0.35) {
+          stack.push([mx, mz, x1, z1, depth + 1]);
+          stack.push([x0, z0, mx, mz, depth + 1]);
+        } else {
+          emit.push([x1, z1]);
+        }
+      }
+      emit.sort((p1, p2) =>
+        (p1[0] - ax) ** 2 + (p1[1] - az) ** 2 - ((p2[0] - ax) ** 2 + (p2[1] - az) ** 2));
+      for (const e of emit) out.push(e[0], e[1]);
+    }
+    return out;
+  }
+
   // Ribbon along a flat [x,z,...] polyline at height y with width w.
-  function pushRibbon(acc, pts, w, y, col) {
+  function pushRibbon(acc, ptsIn, w, y, col) {
+    const pts = densifyForElev(ptsIn);
     const n = pts.length / 2;
     if (n < 2) return;
     const hw = w / 2;
@@ -546,7 +611,7 @@ const WORLD = (() => {
 
   // keep generated/real filler buildings out of the landmark sites
   const LANDMARK_CLEAR_R = {
-    dam: 360, stadium: 175, university: 120, park: 130, bazaar: 115,
+    dam: 620, stadium: 175, university: 120, park: 130, bazaar: 115,
     mall: 95, dream: 140, gorge: 30, kiosk: 26, villa1: 30,
   };
   function landmarkClearZones() {
@@ -578,7 +643,9 @@ const WORLD = (() => {
       acc = makeAcc(); inChunk = 0;
     };
     // only the tiny custom sites (kiosk) displace real mapped buildings
-    const kioskZones = landmarkClearZones().filter(z => z.r <= 30);
+    // tiny custom sites (kiosk/villa) and the dam embankment displace real
+    // mapped buildings (nothing should stand on the elevated wall)
+    const kioskZones = landmarkClearZones().filter(z => z.r <= 30 || z.r >= 550);
     let bi = 0;
     for (const b of buildings) {
       const poly = b.pts;
@@ -942,7 +1009,7 @@ const WORLD = (() => {
     g.rotation.y = Math.atan2(qx - p.x, qz - p.z);
   }
 
-  function buildLandmark(lm, colHash, roadIndex) {
+  function buildLandmark(lm, colHash, roadIndex, heightAtFn) {
     const g = new THREE.Group();
     const p = OSM.project(lm.lat, lm.lon);
     g.position.set(p.x, BASE(p.x, p.z) - 0.15, p.z);
@@ -952,28 +1019,56 @@ const WORLD = (() => {
 
     switch (lm.kind) {
       case 'dam': {
-        // 600 m long, 60 m high embankment dam across the valley mouth:
-        // a box with the top edge pinched into a trapezoidal ridge
-        const ridgeGeo = new THREE.BoxGeometry(620, 58, 90);
-        {
-          const pos = ridgeGeo.attributes.position;
-          for (let i = 0; i < pos.count; i++) {
-            if (pos.getY(i) > 0) pos.setZ(i, pos.getZ(i) * 0.12);
+        // The embankment IS the elevated ground (cityBase) — here we drape a
+        // high-resolution patch over it so the faces read as riprap, add the
+        // intake tower and the name board.  NO collision on the wall: you
+        // drive up the approach road and across the whole crest.
+        const gy = g.position.y;
+        const w2l = (x, z) => [x - p.x, z - p.z];
+        const acc = makeAcc();
+        const tan = [0.607, 0.561, 0.416];     // valley terrain colour
+        const step = 20;
+        let prevRow = null;
+        for (let s = -140; s <= DAM.len + 140; s += step) {
+          const row = [];
+          for (let d = -260; d <= 620; d += step) {
+            const x = DAM.ax + DAM.ux * s + DAM.nx * d;
+            const z = DAM.az + DAM.uz * s + DAM.nz * d;
+            row.push([x - p.x, heightAtFn(x, z) - 0.30 - gy, z - p.z, d]);
           }
-          ridgeGeo.computeVertexNormals();
-          ridgeGeo.translate(0, 29, 0);
+          if (prevRow) {
+            for (let i = 0; i < row.length - 1; i++) {
+              const dMid = (row[i][3] + row[i + 1][3]) / 2;
+              const rc = Math.abs(dMid) < 16 ? [0.44, 0.44, 0.45]
+                : dMid < 0 ? [0.40, 0.40, 0.38] : [0.52, 0.48, 0.41];
+              const wx = (row[i][0] + prevRow[i + 1][0]) / 2 + p.x;
+              const wz = (row[i][2] + prevRow[i + 1][2]) / 2 + p.z;
+              const k = Math.min(1, damCrestFall(wx, wz) * 1.6);
+              const col = [tan[0] + (rc[0] - tan[0]) * k,
+                           tan[1] + (rc[1] - tan[1]) * k,
+                           tan[2] + (rc[2] - tan[2]) * k];
+              pushQuad(acc, prevRow[i], prevRow[i + 1], row[i + 1], row[i], lin(col));
+            }
+          }
+          prevRow = row;
         }
-        const wall = new THREE.Mesh(ridgeGeo, lambert(0x9a938a));
-        wall.position.set(0, 0, -140);
-        g.add(wall);
-        box(g, 624, 2.2, 9, 0x777d85, 0, 58.5, -140);   // crest road
-        const dsign = makeSign('DUHOK DAM', '#26502f', '#ffffff', 60, 8);
-        dsign.position.set(0, 34, -96);                  // on the city-side face
+        g.add(accToMesh(acc, MAT.vcBasic));
+
+        // intake tower standing in the water behind the wall
+        const midX = (DAM.ax + DAM.bx) / 2, midZ = (DAM.az + DAM.bz) / 2;
+        const [tx, tz] = w2l(midX - DAM.nx * 75 + DAM.ux * 90, midZ - DAM.nz * 75 + DAM.uz * 90);
+        cyl(g, 5, 5.6, 30, 0xb8b2a6, tx, DAM.BED + 14 - gy, tz, 12);
+        cyl(g, 6.2, 6.2, 3, 0x8a8478, tx, DAM.BED + 30 - gy, tz, 12);
+        colHash.addBox(p.x + tx - 6, p.z + tz - 6, p.x + tx + 6, p.z + tz + 6);
+
+        // big name board on the city-side slope: سەدا دهوک
+        const dsign = makeSign('سەدا دهوک', '#26502f', '#ffffff', 70, 10);
+        const sgx = midX + DAM.nx * 220, sgz = midZ + DAM.nz * 220;
+        const [sx, sz] = w2l(sgx, sgz);
+        dsign.position.set(sx, BASE(sgx, sgz) + 7 - gy, sz);
+        dsign.rotation.y = Math.atan2(DAM.nx, DAM.nz);
         g.add(dsign);
-        cyl(g, 6, 6, 66, 0xb8b2a6, -80, 33, -190, 12);         // intake tower
-        box(g, 40, 14, 30, 0x8a8478, 120, 7, -60);              // spillway house
-        addCol(640, 90, 0, -140);
-        labelH = 95;
+        labelH = DAM.CREST - gy + 34;
         break;
       }
       case 'stadium': {
@@ -1334,7 +1429,7 @@ const WORLD = (() => {
     for (let k = 0; k < 1400 && i < 2200; k++) {
       const x = -8500 + _rng() * 17000, z = -4500 + _rng() * 9000;
       const h = rawHeight(x, z);
-      if (h > 40) continue;
+      if (h > 40 || damCrestFall(x, z) > 0.05) continue;   // not on the dam wall
       const near = roadIndex.nearest(x, z, 60);
       if (near && near.d < 14) continue;
       put(x, z, 0.7 + _rng() * 1.1);
@@ -1443,7 +1538,7 @@ const WORLD = (() => {
 
     const landmarkGroups = [];
     for (const lm of OSM.LANDMARKS.concat(CUSTOM_SITES)) {
-      const grp = buildLandmark(lm, colHash, roadIndex);
+      const grp = buildLandmark(lm, colHash, roadIndex, heightAt);
       landmarkGroups.push(grp);
       scene.add(grp);
     }

@@ -65,10 +65,12 @@ const FALLBACK_MAP = (() => {
       [36.8628, 42.9600], [36.8638, 42.9750], [36.8645, 42.9880],
       [36.8652, 42.9990], [36.8662, 43.0080],
     ]);
-    // Road up to the dam and around the lake
+    // Road up to the dam: climbs the east abutment, then runs the full
+    // crest between the real endpoints (west end is a viewpoint dead-end)
     R('Duhok Dam Road', 'secondary', [
-      [36.8695, 43.0000], [36.8722, 43.0018], [36.8758, 43.0036],
-      [36.8800, 43.0090], [36.8832, 43.0130],
+      [36.8695, 43.0000], [36.8712, 43.0032], [36.8727, 43.0062],
+      [36.8742, 43.0080], [36.87576, 43.00753],
+      [36.87661, 43.00021],
     ]);
     // Amedi Road — heads north-east out of the city towards Zawita
     R('Amedi Road', 'trunk', [

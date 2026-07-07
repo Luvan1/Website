@@ -46,7 +46,9 @@ const OSM = (() => {
    *   approx:   placed from map knowledge; may be a few hundred metres off.
    * ----------------------------------------------------------------------*/
   const LANDMARKS = [
-    { id: 'dam',      name: 'Duhok Dam & Lake',        lat: 36.8758, lon: 43.0036, verified: true,  kind: 'dam' },
+    // crest midpoint of the real dam (player-verified endpoints:
+    // 36.87576,43.00753 east — 36.87661,43.00021 west)
+    { id: 'dam',      name: 'سەدا دهوک',               lat: 36.876185, lon: 43.00387, verified: true,  kind: 'dam' },
     { id: 'stadium',  name: 'Duhok Stadium',           lat: 36.8519, lon: 42.9961, verified: true,  kind: 'stadium' },
     { id: 'uod',      name: 'University of Duhok',     lat: 36.8618, lon: 42.9869, verified: true,  kind: 'university' },
     { id: 'azadi',    name: 'Azadi Park',              lat: 36.8483, lon: 42.9967, verified: true,  kind: 'park' },
@@ -341,6 +343,35 @@ const OSM = (() => {
     return places;
   }
 
+  // Whatever the live data says, the dam crest must be drivable end to end:
+  // if no mapped road runs over the crest, add the approach + crest road.
+  function ensureDamRoad(roads) {
+    const a = project(36.87576, 43.00753), b = project(36.87661, 43.00021);
+    const mid = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+    for (const r of roads) {
+      for (let i = 0; i < r.pts.length / 2 - 1; i++) {
+        // distance from the crest midpoint to this road segment
+        const ax = r.pts[i * 2], az = r.pts[i * 2 + 1];
+        const bx = r.pts[i * 2 + 2], bz = r.pts[i * 2 + 3];
+        const dx = bx - ax, dz = bz - az;
+        const len2 = dx * dx + dz * dz || 1e-9;
+        let t = ((mid.x - ax) * dx + (mid.z - az) * dz) / len2;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const qx = ax + dx * t - mid.x, qz = az + dz * t - mid.z;
+        if (qx * qx + qz * qz < 80 * 80) return;   // a road already crosses the crest
+      }
+    }
+    const pts = [];
+    for (const [lat, lon] of [
+      [36.8695, 43.0000], [36.8712, 43.0032], [36.8727, 43.0062],
+      [36.8742, 43.0080], [36.87576, 43.00753], [36.87661, 43.00021],
+    ]) {
+      const p = project(lat, lon);
+      pts.push(p.x, p.z);
+    }
+    roads.push({ name: 'Duhok Dam Road', cls: 'secondary', oneway: false, pts });
+  }
+
   /* ------------------------------ Main load ------------------------------ */
   async function loadCity(opts) {
     const onStatus = opts.onStatus || (() => {});
@@ -377,6 +408,7 @@ const OSM = (() => {
       }
       const roads = parseRoads({ elements: roadEls });
       if (roads.length < 30) throw new Error('suspiciously little road data');
+      ensureDamRoad(roads);
       const areas = parseAreas({ elements: areaEls });
       const buildings = parseBuildings({ elements: buildingEls });
       const places = parsePlaces({ elements: placeEls });
